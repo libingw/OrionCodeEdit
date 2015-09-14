@@ -1,3 +1,4 @@
+@import url(https://fonts.googleapis.com/css?family=Open+Sans:400,700,600);
 .textview {
 	background-color: white;
 	font-family: "Consolas", "Monaco", "Vera Mono", monospace;
@@ -219,6 +220,7 @@
 }
 .contentassist {
 	font-size:12px;
+   font-family: "Open+Sans", "Consolas", "Monaco", "Vera Mono", monospace;
 	display: none;
 	background-color: white;
 	position: fixed;
@@ -242,6 +244,7 @@
 }
 .contentassist .proposal-emphasis {
 	font-weight: normal;
+   position: relative;
 }
 .contentassist hr{
 	border: 0;
@@ -2187,4 +2190,17 @@ a.breadcrumb.currentLocation {
 	margin: 0 5px 0 0;
 	outline: none;
 	vertical-align: top;
+}
+.proposal-belongsTo{
+   position: absolute;
+   display: block;
+   top: 0px;
+   right: 5px;
+   background-color: #ffffff;
+   font-size: 11px;
+   color: #909090;
+}
+
+.proposal-emphasis.selected .proposal-belongsTo{
+   display: none;
 }

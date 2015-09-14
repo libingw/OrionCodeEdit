@@ -30771,6 +30771,41 @@ define("orion/editor/contentAssist", [ //$NON-NLS-0$
 			this._computedProposals = null;
 			
 			this._computeProposals(this._initialCaretOffset).then(function(proposals) {
+            
+            
+            //add a new property to the proposal called 'proposal_belongsTo'
+            //make 'proposal_belongsTo' equal to its scripting language name
+            //i.e proposal 'RegExp' will have 'ecma5' as 'proposal_belongsTo'
+            var proposal_noemphasis_title = "";
+            var proposals_with_emphasis = proposals[0].filter(function(obj) {
+               if (obj.style === "noemphasis_title"){
+                  proposal_noemphasis_title = obj.description;
+               }else{
+                  obj.proposal_belongsTo = proposal_noemphasis_title;
+               }
+               
+               return obj.style !== "noemphasis_title";
+            });
+
+            proposals[0] = proposals_with_emphasis;
+            
+            //conbine and sort all proposals
+            proposals[0] = proposals[0].sort(function(a,b) {
+               
+               if(!a.hasOwnProperty("name")){
+                  return 1;
+               }else if(!b.hasOwnProperty("name")){
+                  return -1;
+               }else if (a.name.toLowerCase() < b.name.toLowerCase()){
+                  return -1;
+               }else if (a.name.toLowerCase() > b.name.toLowerCase()){
+                  return 1;
+               }else{
+                  return 0;
+               }
+               
+            });
+            
 				if (this.isActive()) {
 					var flatProposalArray = this._flatten(proposals);
 					//check if flattened proposals form a valid array with at least one entry
@@ -30930,24 +30965,29 @@ define("orion/editor/contentAssist", [ //$NON-NLS-0$
 								} else {
 									return false; // unknown format
 								}
-			
-								return (0 === proposalString.indexOf(prefixText + this._filterText));
+                        //make selecting proposals case insensitive
+								return (0 === proposalString.toLowerCase().indexOf(prefixText.toLowerCase() + this._filterText.toLowerCase()));
 								
 							} else if (proposal.name || proposal.proposal) {
+                        
+                        
 								var activated = false;
 								// try matching name
 								if (proposal.name) {
-									activated = (0 === proposal.name.indexOf(prefixText + this._filterText));	
+                           //make selecting proposals case insensitive
+									activated = (0 === proposal.name.toLowerCase().indexOf(prefixText.toLowerCase() + this._filterText.toLowerCase()));	
 								}
 								
 								// try matching proposal text
 								if (!activated && proposal.proposal) {
-									activated = (0 === proposal.proposal.indexOf(this._filterText));
+                           //make selecting proposals case insensitive
+									activated = (0 === proposal.proposal.toLowerCase().indexOf(this._filterText.toLowerCase()));
 								}
 								
 								return activated;
 							} else if (typeof proposal === "string") { //$NON-NLS-0$
-								return 0 === proposal.indexOf(this._filterText);
+                        //make selecting proposals case insensitive
+								return 0 === proposal.toLowerCase().indexOf(this._filterText.toLowerCase());
 							} else {
 								return false;
 							}
@@ -31136,20 +31176,21 @@ define("orion/editor/contentAssist", [ //$NON-NLS-0$
 						last = filteredArray;
 					}
 					
-					if (first.length > 0) {
-						var firstArrayStyle = first[first.length - 1].style;
-						if (firstArrayStyle && (STYLES.hr !== STYLES[firstArrayStyle])) {
-							// add separator between proposals from different providers 
-							// if the previous array didn't already end with a separator
-							first = first.concat({
-								proposal: '',
-								name: '',
-								description: '---------------------------------', //$NON-NLS-0$
-								style: 'hr', //$NON-NLS-0$
-								unselectable: true
-							});
-						}
-					}
+               //since proposals are all grouped into one, this is not required
+//					if (first.length > 0) {
+//						var firstArrayStyle = first[first.length - 1].style;
+//						if (firstArrayStyle && (STYLES.hr !== STYLES[firstArrayStyle])) {
+//							// add separator between proposals from different providers 
+//							// if the previous array didn't already end with a separator
+//							first = first.concat({
+//								proposal: '',
+//								name: '',
+//								description: '---------------------------------', //$NON-NLS-0$
+//								style: 'hr', //$NON-NLS-0$
+//								unselectable: true
+//							});
+//						}
+//					}
 					
 					returnValue = first.concat(last);
 				}
@@ -31708,7 +31749,15 @@ define("orion/editor/contentAssist", [ //$NON-NLS-0$
 			if (tagsNode) { node.appendChild(tagsNode); }
 			node.appendChild(nameNode);
 			if (descriptionNode) { node.appendChild(descriptionNode); }
-
+         
+         //show which js language each proposal belongs to
+         //(will be displayed to the right of each proposal)
+         if (typeof nameNode === "object" && nameNode){
+            var node_proposal_belongsTo = document.createElement("span");
+            node_proposal_belongsTo.classList.add("proposal-belongsTo");
+            node_proposal_belongsTo.appendChild(document.createTextNode(proposal.proposal_belongsTo));
+            node.appendChild(node_proposal_belongsTo);
+         }
 			nameNode.contentAssistProposalIndex = index;
 			node.contentAssistProposalIndex = index;
 			
