@@ -16790,7 +16790,7 @@ define("orion/editor/textView", [  //$NON-NLS-1$
 				// See bug 366312 and 376508.
 				this._updateDOMSelection();
 			}
-			var preventDefault = false;
+			var preventDefault = true;
 			if (this.isListening("ContextMenu")) { //$NON-NLS-1$
 				var evt = this._createMouseEvent("ContextMenu", e); //$NON-NLS-1$
 				evt.screenX = e.screenX;
