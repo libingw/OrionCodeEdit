@@ -30,27 +30,22 @@
 				height: 450px;
 			}
 		</style>
+      <script src="http://localhost/projects/cdnjs-master/ajax/libs/jquery/2.1.4/jquery.js"></script>
 	    <link rel="stylesheet" type="text/css" href="editorBuild/code_edit/built-codeEdit.css"/>
 		<script src="editorBuild/code_edit/built-codeEdit.js"></script>
 		<script>
 			/*globals orion */
 			window.onload=function(){
 				var codeEdit = new orion.codeEdit();
-				var contents = 'var foo = "bar";\n' +
-									 "var bar = foo;\n" + 
-									 "/*\n" + 
-									 " * test demo\n" + 
-									 "*/\n" + 
-									 "function test(){\n" + 
-									 "	var foo1 = bar.lastIndexOf(char, from);\n" + 
-									 "}\n" + 
-									"//Keep editting in this demo and try the content assit, probem validations and hover service!\n" +
-									 "var foo2 = foo."; 
-				codeEdit.create({parent: "embeddedEditor", contentType: "application/javascript", contents: contents}).then(function(editorViewer) {
+				var contents = 'var foo = '; 
+
+            codeEdit.create({ parent: "embeddedEditor", contentType: "application/javascript", contents: contents}).then(function(editorViewer) {
 					document.getElementById("progressMessageDiv").textContent = "Plugins loaded!";
-					//You can call APIs from editorViewer.editor  for further actions.
+               editorViewer.settings.contentAssistAutoTrigger = true;
 				});
+
 			};
+
 		</script>
     </head>
 	<body id="orion-browser" spellcheck="false" class="orionPage">
@@ -67,7 +62,6 @@
 		</div>
 		<div class="demoTitle">
 			<span id = "progressMessageDiv" style="color: green">Loading language tooling plugins...</span>
-		</div>
 		</div>
 		<div class="demoBody" id="embeddedEditor">
 		</div>
