@@ -2862,7 +2862,7 @@ define('orion/webui/tooltip',['orion/webui/littlelib'], function(lib) {
 });
 /*******************************************************************************
  * @license
- * Copyright (c) 2014 IBM Corporation and others.
+ * Copyright (c) 2014, 2016 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials are made
  * available under the terms of the Eclipse Public License v1.0
  * (http://www.eclipse.org/legal/epl-v10.html), and the Eclipse Distribution
@@ -2870,13 +2870,27 @@ define('orion/webui/tooltip',['orion/webui/littlelib'], function(lib) {
  *
  * Contributors: IBM Corporation - initial API and implementation
  ******************************************************************************/
-
 /*eslint-env browser, amd*/
-define('orion/metrics',[], function() {
+define('orion/metrics',[
+], function() {
 
 	var _services = [];
+	var timingVars = Object.create(null);
 
-	function init(services, args) {
+	/**
+	 * @name Metrics
+	 * @description Creates a new instance of the metrics service
+	 * @param {Object} serviceRegistry The backing service registry to register the new service with
+	 * @param {Object} args An object of additional arguments
+	 * @returns {Metrics} A new Metrics instance
+	 * @since 12.0
+	 */
+	function Metrics(serviceRegistry, args) {
+		var refs = serviceRegistry.getServiceReferences("orion.metrics"); //$NON-NLS-0$
+		var services = [];
+		refs.forEach(function(current) {
+			services.push(serviceRegistry.getService(current));
+		});
 		/* the following definitions are from https://developers.google.com/analytics/devguides/collection/analyticsjs/pages */
 		var href = window.location.protocol + '//' + window.location.hostname + window.location.pathname + window.location.search; //$NON-NLS-0$
 		var page = window.location.pathname + window.location.search;
@@ -2886,25 +2900,23 @@ define('orion/metrics',[], function() {
 		_services.forEach(function(current) {
 			current.pageLoad(href, page, title, args);
 		});
+		serviceRegistry.registerService("orion.core.metrics.client", this); //$NON-NLS-1$
 	}
-
-	function initFromRegistry(serviceRegistry, args) {
-		var refs = serviceRegistry.getServiceReferences("orion.metrics"); //$NON-NLS-0$
-		var services = [];
-		refs.forEach(function(current) {
-			services.push(serviceRegistry.getService(current));
+	
+	/** @callback */
+	function _logTiming(timingCategory, timingVar, timingValue, timingLabel) {
+		_services.forEach(function(current) {
+			current.logTiming(timingCategory, timingVar, timingValue, timingLabel);
 		});
-		init(services, args);
 	}
-
-	function logEvent(category, action, label, value, details) {
+	/** @callback */
+	function _logEvent(category, action, label, value, details) {
 		_services.forEach(function(current) {
 			current.logEvent(category, action, label || "", value, details);
 		});
 	}
-
-	var timingVars = {};
-	function logPageLoadTiming(timingVar, timingLabel) {
+	/** @callback */
+	function _logPageLoadTiming(timingVar, timingLabel) {
 		/* 
 		 * The level of window.performance implementation varies across the browsers,
 		 * so check for the existence of all utilized functions up-front.
@@ -2920,24 +2932,52 @@ define('orion/metrics',[], function() {
 				if (timingVars[timingVar]) {
 					return;
 				}
-				timingVars[timingVar] = new Date();				
+				timingVars[timingVar] = Date.now();				
 			}
-			logTiming("page", timingVar, window.performance.now(), timingLabel); //$NON-NLS-0$
+			_logTiming("page", timingVar, window.performance.now(), timingLabel); //$NON-NLS-0$
 		}
 	}
-
-	function logTiming(timingCategory, timingVar, timingValue, timingLabel) {
-		_services.forEach(function(current) {
-			current.logTiming(timingCategory, timingVar, timingValue, timingLabel);
-		});
-	}
-
+	
+	Metrics.prototype = {
+		/**
+		 * @description Log a timing
+		 * @function
+		 * @param {String} timingCategory The name of the category to log to
+		 * @param {String} timingVar The name of the variable to log to
+		 * @param {Number} timingValue The timing to log
+		 * @param {String} timingLabel A label for the new timing
+		 */
+		logTiming: function(timingCategory, timingVar, timingValue, timingLabel) {
+			_logTiming(timingCategory, timingVar, timingValue, timingLabel);
+		},
+		/**
+		 * @description Log an event
+		 * @function
+		 * @param {String} category The name of the category to log to
+		 * @param {String} action The name of the action logged
+		 * @param {String} label A label for the event
+		 * @param {String} value The event value to log
+		 * @param {String} details Additional details about the event being logged
+		 */
+		logEvent: function(category, action, label, value, details) {
+			_logEvent(category, action, label, value, details);
+		},
+		/**
+		 * @description Log how long it took to load a page
+		 * @function
+		 * @param {Number} timingVar The timing to log
+		 * @param {String} timingLabel A label for the new timing
+		 */
+		logPageLoadTiming: function(timingVar, timingLabel) {
+			_logPageLoadTiming(timingVar, timingLabel);
+		}
+	};
+	
 	return {
-		init: init,
-		initFromRegistry: initFromRegistry,
-		logEvent: logEvent,
-		logPageLoadTiming: logPageLoadTiming,
-		logTiming: logTiming
+		Metrics: Metrics,
+		logTiming: _logTiming,
+		logEvent: _logEvent,
+		logPageLoadTiming: _logPageLoadTiming
 	};
 });
 
@@ -3169,12 +3209,14 @@ define('orion/commands',[
 		return checkbox;
 	}
 
-	function createQuickfixItem(parent, command, commandInvocation, callback) {
+	function createQuickfixItem(parentElement, command, commandInvocation, callback, prefService) {
 		var element;
 		var button;
 		var clickTarget;
 		var fixAllCheckbox;
 		var fixAllLabel;
+		
+		var quickfixSettings = '/languageTools/quickfix'; //$NON-NLS-1$
 		
 		element = document.createElement("div"); //$NON-NLS-1$
 		
@@ -3190,8 +3232,16 @@ define('orion/commands',[
 		var onClick = callback || command.callback;
 		if (onClick) {
 			var done = function() {
-				if (fixAllCheckbox && fixAllCheckbox.checked){
-					commandInvocation.userData.doFixAll = true;
+				if (fixAllCheckbox){
+					if (fixAllCheckbox.checked){
+						commandInvocation.userData.doFixAll = true;
+					}
+					if (prefService){
+						prefService.get(quickfixSettings).then(function(prefs) {
+							prefs[command.id] = fixAllCheckbox.checked;
+							prefService.put(quickfixSettings, prefs);
+						});
+					}
 				}
 				onClick.call(commandInvocation.handler, commandInvocation);
 			};
@@ -3212,21 +3262,22 @@ define('orion/commands',[
 				e.stopPropagation();
 			}, false);
 		}
-		if (parent.nodeName.toLowerCase() === "ul") {
+		if (parentElement.nodeName.toLowerCase() === "ul") {
 			var li = document.createElement("li"); //$NON-NLS-0$
-			parent.appendChild(li);
-			parent = li;
+			parentElement.appendChild(li);
+			parentElement = li;
 		} else {
 			button.classList.add("commandMargins"); //$NON-NLS-0$
 		}
 		element.appendChild(button);
 		
-		// TODO We check that the internal access to annotation model exists so if it breaks we don't show the checkbox at all
+		// We check that the internal access to annotation model exists so if it breaks we don't show the checkbox at all rather than throw an error later
 		if (command.fixAllEnabled && commandInvocation.userData._annotationModel){
-			var id = command.name + 'fixAll'; //$NON-NLS-1$
+			var id = command.id + 'fixAll'; //$NON-NLS-1$
 			fixAllCheckbox = document.createElement('input'); //$NON-NLS-1$
 			fixAllCheckbox.type = 'checkbox'; //$NON-NLS-1$
 			fixAllCheckbox.className = "quickfixAllParameter"; //$NON-NLS-1$
+			fixAllCheckbox.checked = true;
 			fixAllCheckbox.id = id;
 			
 			fixAllLabel = document.createElement('label'); //$NON-NLS-1$
@@ -3234,11 +3285,19 @@ define('orion/commands',[
 			fixAllLabel.className = "quickfixAllParameter"; //$NON-NLS-1$
 			fixAllLabel.appendChild(document.createTextNode(messages['fixAll'])); 
 			
+			if (prefService){
+				prefService.get(quickfixSettings).then(function(prefs) {
+					if (typeof prefs[command.id] === 'boolean'){
+						fixAllCheckbox.checked = prefs[command.id];
+					}
+					
+				});
+			}
+			
 			element.appendChild(fixAllCheckbox);
 			element.appendChild(fixAllLabel);
 		}
-		
-		parent.appendChild(element);
+		parentElement.appendChild(element);
 		return element;
 	}
 	
@@ -5016,12 +5075,12 @@ define('orion/commandRegistry',[
 			/**
 			 * @name addEventListener
 			 * 
-			 * @description  This is an override of the normal addEventListener to allow it to
+			 * @description This is an override of the normal addEventListener to allow it to
 			 * keep listeners synch'd with the current binding overrides whether or not they get added before or
 			 * after the actual binding overrides have been retrieved from the preference store.
 			 * 
 			 * Once the overrides preference is loaded any currently registered listeners are informed of the current
-			 * binding overrides. Subsequent listeners are also imformed when they get added.
+			 * binding overrides. Subsequent listeners are also informed when they get added.
 			 * @param eventType The type of event being listened on.
 			 * @param listener The listener to call when the event is dispatched.
 			 */
@@ -5464,7 +5523,7 @@ define('orion/commandRegistry',[
 		 * @param id The id of the Command or Text Action being overridden
 		 * @param newBinding The new binding to use
 		 * @param prevBinding The binding (if any) being overridden. Note that this is needed to ensure that
-		 * we override the correct Text Action (which can havemultiple bindings for the same id).
+		 * we override the correct Text Action (which can have multiple bindings for the same id).
 		 */
 		createBindingOverride: function(id, newBinding, prevBinding) {
 			if (!this._bindingOverrides) {
@@ -5487,12 +5546,12 @@ define('orion/commandRegistry',[
 
 		/**
 		 * @name _registerRenderedCommand
-		 * @description Keeps a record of the 'invocation' object for a renderred command. The invocation contains
+		 * @description Keeps a record of the 'invocation' object for a rendered command. The invocation contains
 		 * a lot of information about the rendered item (including the DOM element created to show it). This is currently
 		 * used to update the menu item's key binding info if its binding changes.
 		 * 
 		 * @param actionID The actionID of the menu item
-		 * @param scopeID The scopeID of this particular invocation (two different menus can be created using teh same commands)
+		 * @param scopeID The scopeID of this particular invocation (two different menus can be created using the same commands)
 		 * @param invocation The invocation record to store
 		 */
 		_registerRenderedCommand: function(actionID, scopeID, invocation) {
@@ -5598,8 +5657,8 @@ define('orion/commandRegistry',[
 		 * the <code>title</code> will be used as the tooltip.
 		 * @param {String} [selectionClass] CSS class to be appended when the command button is selected. Optional.
 		 * @param {String} or {boolean} [defaultActionId] Id of an action from this group that should be invoked when the group is selected. This will add an
-		 * arrow to the grup that will open the dropdown. Optionally this can be set to <code>true</code> instead of adding a particular action.
-		 * If set to <code>true</code> the group will be renderer as if there was a default action, but instead of invoking the default action it will
+		 * arrow to the group that will open the dropdown. Optionally this can be set to <code>true</code> instead of adding a particular action.
+		 * If set to <code>true</code> the group will be rendered as if there was a default action, but instead of invoking the default action it will
 		 * open the dropdown. Optional.
 		 * @param {String} [extraClasses] A string containing space separated css classes that will be applied to group button
 		 */	
@@ -5705,7 +5764,7 @@ define('orion/commandRegistry',[
 					this._updateBindingOverrides();
 				}.bind(this));
 	
-				// listen for changes form other pages
+				// listen for changes from other pages
 				this._prefService.addEventListener("changed", function (e) {
 					if (e.namespace === "/KeyBindings") { //$NON-NLS-1$
 						// Refresh the binding overrides
@@ -6185,7 +6244,7 @@ define('orion/commandRegistry',[
 								id = renderType + command.id + index; // using the index ensures unique ids within the DOM when a command repeats for each item
 								var commandDiv = document.createElement("div"); //$NON-NLS-0$
 								parent.appendChild(commandDiv);
-								element = Commands.createQuickfixItem(commandDiv, command, invocation, onClick);
+								element = Commands.createQuickfixItem(commandDiv, command, invocation, onClick, self._prefService);
 							} else {
 								id = renderType + command.id + index;  // // using the index ensures unique ids within the DOM when a command repeats for each item
 								element = Commands.createCommandItem(parent, command, invocation, id, null, renderType === "tool", onClick);
@@ -6354,7 +6413,7 @@ define('orion/commandRegistry',[
 	 * @param {String} name the name of the event
 	 * @param {Function} handler the event handler function. The handler is provided two parameters on invocation, i. e.
 	 * 			the DOM event and the undergoing commandInvocation objects.
-	 * @param {Boolean} [capture] the (optional) flag used to determine whether to caputre the event or not
+	 * @param {Boolean} [capture] the (optional) flag used to determine whether to capture the event or not
 	 */
 	function CommandEventListener (event, handler, capture) {
 		this.event = event;
@@ -6405,7 +6464,7 @@ define('orion/commandRegistry',[
 	 * A ParametersDescription defines the parameters required by a command, and whether there are additional
 	 * optional parameters that can be specified.  The command registry will attempt to collect required parameters
 	 * before calling a command callback.  The command is expected to provide UI for optional parameter, when the user has
-	 * signalled a desire to provide optional information.
+	 * signaled a desire to provide optional information.
 	 *
 	 * @param {orion.commands.CommandParameter[]} parameters an array of CommandParameters that are required
 	 * @param {Object} options The parameters description options object.
@@ -6761,7 +6820,7 @@ define('orion/navigate/nls/root/messages',{//Default message bundle
 
 /*******************************************************************************
  * @license
- * Copyright (c) 2010, 2012 IBM Corporation and others.
+ * Copyright (c) 2010, 2016 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials are made 
  * available under the terms of the Eclipse Public License v1.0 
  * (http://www.eclipse.org/legal/epl-v10.html), and the Eclipse Distribution 
@@ -6772,8 +6831,12 @@ define('orion/navigate/nls/root/messages',{//Default message bundle
 
 /*eslint-env browser, amd*/
 /** @namespace The global container for eclipse APIs. */
-
-define('orion/fileClient',['i18n!orion/navigate/nls/messages', "orion/Deferred", "orion/i18nUtil"], function(messages, Deferred, i18nUtil){
+define('orion/fileClient',[
+	'i18n!orion/navigate/nls/messages', 
+	"orion/Deferred", 
+	"orion/i18nUtil",
+	'orion/EventTarget'
+], function(messages, Deferred, i18nUtil, EventTarget) {
 	/**
 	 * This helper method implements invocation of the service call,
 	 * with retry on authentication error if needed.
@@ -6787,6 +6850,15 @@ define('orion/fileClient',['i18n!orion/navigate/nls/messages', "orion/Deferred",
 		return fileService[funcName].apply(fileService, funcArgs);
 	}
 	
+	/**
+	 * @description Copy 
+	 * @private
+	 * @param sourceService
+	 * @param sourceLocation
+	 * @param targetService
+	 * @param targetLocation
+	 * @returns returns
+	 */
 	function _copy(sourceService, sourceLocation, targetService, targetLocation) {
 		
 		if (!sourceService.readBlob) {
@@ -6797,22 +6869,22 @@ define('orion/fileClient',['i18n!orion/navigate/nls/messages', "orion/Deferred",
 			throw new Error(messages["TargetNotSupportBinWrite"]);
 		}
 	
-		if (sourceLocation[sourceLocation.length -1] !== "/") { //$NON-NLS-0$
-			return _doServiceCall(sourceService, "readBlob", [sourceLocation]).then(function(contents) { //$NON-NLS-0$
-				return _doServiceCall(targetService, "writeBlob", [targetLocation, contents]); //$NON-NLS-0$
+		if (sourceLocation[sourceLocation.length -1] !== "/") {
+			return _doServiceCall(sourceService, "readBlob", [sourceLocation]).then(function(contents) { //$NON-NLS-1$
+				return _doServiceCall(targetService, "writeBlob", [targetLocation, contents]); //$NON-NLS-1$
 			});
 		}
 
 		var temp = targetLocation.substring(0, targetLocation.length - 1);
-		var name = decodeURIComponent(temp.substring(temp.lastIndexOf("/")+1)); //$NON-NLS-0$
-		var parentLocation = temp.substring(0, temp.lastIndexOf("/")+1);  //$NON-NLS-0$
+		var targetName = decodeURIComponent(temp.substring(temp.lastIndexOf("/")+1));
+		var parentLocation = temp.substring(0, temp.lastIndexOf("/")+1);
 
-		return _doServiceCall(targetService, "createFolder", [parentLocation, name]).then(function() { //$NON-NLS-0$
+		return _doServiceCall(targetService, "createFolder", [parentLocation, targetName]).then(function() { //$NON-NLS-1$
 			return;
 		}, function() {
 			return;
 		}).then(function() {
-			return _doServiceCall(sourceService, "fetchChildren", [sourceLocation]).then(function(children) { //$NON-NLS-0$
+			return _doServiceCall(sourceService, "fetchChildren", [sourceLocation]).then(function(children) { //$NON-NLS-1$
 				var results = [];
 				for(var i = 0; i < children.length; ++i) {
 					var childSourceLocation = children[i].Location;
@@ -6820,11 +6892,11 @@ define('orion/fileClient',['i18n!orion/navigate/nls/messages', "orion/Deferred",
 					if (children[i].Directory) {
 						childTemp = childSourceLocation.substring(0, childSourceLocation.length - 1);
 					}
-					var childName = decodeURIComponent(childTemp.substring(childTemp.lastIndexOf("/")+1)); //$NON-NLS-0$
+					var childName = decodeURIComponent(childTemp.substring(childTemp.lastIndexOf("/")+1));
 					
 					var childTargetLocation = targetLocation + encodeURIComponent(childName);
 					if (children[i].Directory) {
-						childTargetLocation += "/"; //$NON-NLS-0$
+						childTargetLocation += "/";
 					}
 					results[i] = _copy(sourceService, childSourceLocation, targetService, childTargetLocation);
 				}
@@ -6846,6 +6918,8 @@ define('orion/fileClient',['i18n!orion/navigate/nls/messages', "orion/Deferred",
 		var _services;
 		var _names;
 		
+		EventTarget.attach(this);
+		/* @callback */
 		function _noMatch(location) {
 			var d = new Deferred();
 			d.reject(messages["No Matching FileService for location:"] + location);
@@ -6854,21 +6928,25 @@ define('orion/fileClient',['i18n!orion/navigate/nls/messages', "orion/Deferred",
 		
 		var _fileSystemsRoots = [];
 		var _allFileSystemsService = {
+			/* @callback */
 			fetchChildren: function() {
 				var d = new Deferred();
 				d.resolve(_fileSystemsRoots);
 				return d;
 			},
+			/* @callback */
 			createWorkspace: function() {
 				var d = new Deferred();
 				d.reject(messages["no file service"]);
 				return d;
 			},
+			/* @callback */
 			loadWorkspaces: function() {
 				var d = new Deferred();
 				d.reject(messages['no file service']);
 				return d;
 			},
+			/* @callback */
 			loadWorkspace: function(location) {
 				var d = new Deferred();
 				window.setTimeout(function() {
@@ -6877,9 +6955,9 @@ define('orion/fileClient',['i18n!orion/navigate/nls/messages', "orion/Deferred",
 						Length: 0, 
 						LocalTimeStamp: 0,
 						Name: messages["File Servers"],
-						Location: "/",  //$NON-NLS-0$
+						Location: "/",
 						Children: _fileSystemsRoots,
-						ChildrenLocation: "/" //$NON-NLS-0$
+						ChildrenLocation: "/"
 					});
 				}, 100);
 				return d;
@@ -6895,13 +6973,17 @@ define('orion/fileClient',['i18n!orion/navigate/nls/messages', "orion/Deferred",
 			write: _noMatch
 		};
 			
+		/**
+		 * @description Initialize the service
+		 * @private 
+		 */
 		function init() {
-			if (_services) return;
+			if (_services) { return; }
 			_patterns = [];
 			_services = [];
 			_names = [];
 			
-			var allReferences = serviceRegistry.getServiceReferences("orion.core.file"); //$NON-NLS-0$
+			var allReferences = serviceRegistry.getServiceReferences("orion.core.file"); //$NON-NLS-1$
 			var _references = allReferences;
 			if (filter) {
 				_references = [];
@@ -6912,8 +6994,8 @@ define('orion/fileClient',['i18n!orion/navigate/nls/messages', "orion/Deferred",
 				}
 			}
 			_references.sort(function (ref1, ref2) {
-				var ranking1 = ref1.getProperty("ranking") || 0;
-				var ranking2 = ref2.getProperty("ranking")  || 0;
+				var ranking1 = ref1.getProperty("ranking") || 0; //$NON-NLS-1$
+				var ranking2 = ref2.getProperty("ranking")  || 0; //$NON-NLS-1$
 				return ranking1 - ranking2;
 			});
 			for(var j = 0; j < _references.length; ++j) {
@@ -6921,61 +7003,83 @@ define('orion/fileClient',['i18n!orion/navigate/nls/messages', "orion/Deferred",
 					Directory: true, 
 					Length: 0, 
 					LocalTimeStamp: 0,
-					Location: _references[j].getProperty("top"), //$NON-NLS-0$
-					ChildrenLocation: _references[j].getProperty("top"), //$NON-NLS-0$
-					Name: _references[j].getProperty("Name") || _references[j].getProperty("NameKey")		 //$NON-NLS-0$
+					Location: _references[j].getProperty("top"), //$NON-NLS-1$
+					ChildrenLocation: _references[j].getProperty("top"), //$NON-NLS-1$
+					Name: _references[j].getProperty("Name") || _references[j].getProperty("NameKey") //$NON-NLS-1$ //$NON-NLS-2$
 				};
 	
-				var filetop = _references[j].getProperty("top");
-				var patternStringArray = _references[j].getProperty("pattern") || (filetop ? filetop.replace(/([.*+?^=!:${}()|\[\]\/\\])/g, "\\$1") : ""); //$NON-NLS-1$ //$NON-NLS-0$
+				var filetop = _references[j].getProperty("top"); //$NON-NLS-1$
+				var patternStringArray = _references[j].getProperty("pattern") || (filetop ? filetop.replace(/([.*+?^=!:${}()|\[\]\/\\])/g, "\\$1") : ""); //$NON-NLS-1$ //$NON-NLS-2$
 				if (!Array.isArray(patternStringArray)) {
 					patternStringArray = [patternStringArray];
 				}
 				var patterns = [];
 				for (var k = 0; k < patternStringArray.length; k++) {
 					var patternString = patternStringArray[k];
-					if (patternString[0] !== "^") { //$NON-NLS-0$
-						patternString = "^" + patternString; //$NON-NLS-0$
+					if (patternString[0] !== "^") {
+						patternString = "^" + patternString;
 					}
 					patterns.push(new RegExp(patternString));
 				}
 				_patterns[j] = patterns;			
 				_services[j] = serviceRegistry.getService(_references[j]);
-				_names[j] = _references[j].getProperty("Name") || _references[j].getProperty("NameKey"); //$NON-NLS-0$
+				_names[j] = _references[j].getProperty("Name") || _references[j].getProperty("NameKey"); //$NON-NLS-1$ //$NON-NLS-2$
 			}
 		}
 				
-		this._getServiceIndex = function(location) {
+		/**
+		 * @description Returns the index of the service for the given item location
+		 * @function
+		 * @private
+		 * @param {String} itemLocation
+		 * @returns returns
+		 */
+		this._getServiceIndex = function(itemLocation) {
 			init();
 			// client must specify via "/" when a multi file service tree is truly wanted
-			if (location === "/") { //$NON-NLS-0$
+			if (itemLocation === "/") {
 				return -1;
-			} else if (!location || (location.length && location.length === 0)) {
+			} else if (!itemLocation || itemLocation.length && itemLocation.length === 0) {
 				// TODO we could make the default file service a preference but for now we use the first one
 				return _services[0] ? 0 : -1;
 			}
 			for(var i = 0; i < _patterns.length; ++i) {
 				for (var j = 0; j < _patterns[i].length; j++) {
-					if (_patterns[i][j].test(location)) {
+					if (_patterns[i][j].test(itemLocation)) {
 						return i;
 					}
 				}
 			}
-			throw new Error(i18nUtil.formatMessage(messages['NoFileSrv'], location));
+			throw new Error(i18nUtil.formatMessage(messages['NoFileSrv'], itemLocation));
 		};
-		
-		this._getService = function(location) {
-			var i = this._getServiceIndex(location);
+		/**
+		 * Returns the file service managing this location
+		 * @param {String} itemLocation The location of the item
+		 * @private
+		 * @returns {FileClient} The service for the given item
+		 */
+		this._getService = function(itemLocation) {
+			var i = this._getServiceIndex(itemLocation);
 			return i === -1 ? _allFileSystemsService : _services[i];
 		};
-		
-		this._getServiceName = function(location) {
-			var i = this._getServiceIndex(location);
+		/**
+		 * Returns the name of the file service managing this location
+		 * @param {String} itemLocation The location of the item
+		 * @private  
+		 * @return {String} The name of this file service
+		 */
+		this._getServiceName = function(itemLocation) {
+			var i = this._getServiceIndex(itemLocation);
 			return i === -1 ? _allFileSystemsService.Name : _names[i];
 		};
-		
-		this._getServiceRootURL = function(location) {
-			var i = this._getServiceIndex(location);
+		/**
+		 * Returns the root url of the file service managing this location
+		 * @param {String} itemLocation The location of the item
+		 * @private 
+		 * @return {String} The root URL of the given item
+		 */
+		this._getServiceRootURL = function(itemLocation) {
+			var i = this._getServiceIndex(itemLocation);
 			return i === -1 ? _allFileSystemsService.Location : _fileSystemsRoots[i].Location;
 		};
 		serviceRegistry.registerService("orion.core.file.client", this); //$NON-NLS-1$
@@ -6984,62 +7088,79 @@ define('orion/fileClient',['i18n!orion/navigate/nls/messages', "orion/Deferred",
 	FileClient.prototype = /**@lends orion.fileClient.FileClient.prototype */ {
 		/**
 		 * Returns the file service managing this location
-		 * @param location The location of the item 
+		 * @param {String} itemLocation The location of the item
+		 * @public
+		 * @returns {FileClient} The service for the given item
 		 */
-		getService: function(location) {
-			return this._getService(location);
+		getService: function(itemLocation) {
+			return this._getService(itemLocation);
 		},
 		 
 		/**
 		 * Returns the name of the file service managing this location
-		 * @param location The location of the item 
+		 * @param {String} itemLocation The location of the item
+		 * @public 
+		 * @return {String} The name of this file service
 		 */
-		fileServiceName: function(location) {
-			return this._getServiceName(location);
+		fileServiceName: function(itemLocation) {
+			return this._getServiceName(itemLocation);
 		},
 		 
 		/**
 		 * Returns the root url of the file service managing this location
-		 * @param location The location of the item 
+		 * @param {String} itemLocation The location of the item
+		 * @public 
+		 * @return {String} The root URL of the given item
 		 */
-		fileServiceRootURL: function(location) {
-			return this._getServiceRootURL(location);
+		fileServiceRootURL: function(itemLocation) {
+			return this._getServiceRootURL(itemLocation);
 		},
 		 
 		/**
 		 * Obtains the children of a remote resource
-		 * @param location The location of the item to obtain children for
-		 * @return A deferred that will provide the array of child objects when complete
+		 * @param {string} parentLocation The location of the item to obtain children for
+		 * @public 
+		 * @return {Deferred} A deferred that will provide the array of child objects when complete
 		 */
-		fetchChildren: function(location) {
-			return _doServiceCall(this._getService(location), "fetchChildren", arguments); //$NON-NLS-0$
+		fetchChildren: function(parentLocation) {
+			return _doServiceCall(this._getService(parentLocation), "fetchChildren", arguments); //$NON-NLS-1$
 		},
 
 		/**
 		 * Creates a new workspace with the given name. The resulting workspace is
 		 * passed as a parameter to the provided onCreate function.
-		 * @param {String} name The name of the new workspace
+		 * @param {String} workspaceName The name of the new workspace
+		 * @public
+		 * @return {Deferred} A deferred that will create a workspace with the given name
 		 */
-		createWorkspace: function(name) {
-			return _doServiceCall(this._getService(), "createWorkspace", arguments); //$NON-NLS-0$
+		createWorkspace: function(workspaceName) {
+			return _doServiceCall(this._getService(), "createWorkspace", arguments); //$NON-NLS-1$
 		},
 
 		/**
 		 * Loads all the user's workspaces. Returns a deferred that will provide the loaded
 		 * workspaces when ready.
+		 * @public 
+		 * @return {Deferred} A deferred that will load all workspaces
 		 */
 		loadWorkspaces: function() {
-			return _doServiceCall(this._getService(), "loadWorkspaces", arguments); //$NON-NLS-0$
+			return _doServiceCall(this._getService(), "loadWorkspaces", arguments); //$NON-NLS-1$
 		},
 		
 		/**
 		 * Loads the workspace with the given id and sets it to be the current
 		 * workspace for the IDE. The workspace is created if none already exists.
-		 * @param {String} location the location of the workspace to load
+		 * @param {String} workspaceLocation the location of the workspace to load
 		 * @param {Function} onLoad the function to invoke when the workspace is loaded
+		 * @public
+		 * @return {Deferred} A deferred that will load the specified workspace
 		 */
-		loadWorkspace: function(location) {
-			return _doServiceCall(this._getService(location), "loadWorkspace", arguments); //$NON-NLS-0$
+		loadWorkspace: function(workspaceLocation) {
+			return _doServiceCall(this._getService(workspaceLocation), "loadWorkspace", arguments); //$NON-NLS-1$
+		},
+		
+		changeWorkspace: function(workspaceLocation) {
+			return _doServiceCall(this._getService(), "changeWorkspace", arguments); //$NON-NLS-1$
 		},
 		
 		/**
@@ -7048,74 +7169,83 @@ define('orion/fileClient',['i18n!orion/navigate/nls/messages', "orion/Deferred",
 		 * @param {String} projectName the human-readable name of the project
 		 * @param {String} serverPath The optional path of the project on the server.
 		 * @param {Boolean} create If true, the project is created on the server file system if it doesn't already exist
+		 * @public
+		 * @return {Deferred} A deferred that will create a new project in the workspace
 		 */
 		createProject: function(url, projectName, serverPath, create) {
-			return _doServiceCall(this._getService(url), "createProject", arguments); //$NON-NLS-0$
+			return _doServiceCall(this._getService(url), "createProject", arguments); //$NON-NLS-1$
 		},
 		/**
 		 * Creates a folder.
 		 * @param {String} parentLocation The location of the parent folder
 		 * @param {String} folderName The name of the folder to create
 		 * @return {Object} JSON representation of the created folder
+		 * @public
+		 * @return {Deferred} A deferred that will create a new folder in the workspace
 		 */
 		createFolder: function(parentLocation, folderName) {
-			return _doServiceCall(this._getService(parentLocation), "createFolder", arguments); //$NON-NLS-0$
+			return _doServiceCall(this._getService(parentLocation), "createFolder", arguments); //$NON-NLS-1$
 		},
 		/**
 		 * Create a new file in a specified location. Returns a deferred that will provide
 		 * The new file object when ready.
 		 * @param {String} parentLocation The location of the parent folder
 		 * @param {String} fileName The name of the file to create
-		 * @return {Object} A deferred that will provide the new file object
+		 * @public
+		 * @return {Deferred} A deferred that will provide the new file object
 		 */
 		createFile: function(parentLocation, fileName) {
-			return _doServiceCall(this._getService(parentLocation), "createFile", arguments); //$NON-NLS-0$
+			return _doServiceCall(this._getService(parentLocation), "createFile", arguments); //$NON-NLS-1$
 		},
 		/**
 		 * Deletes a file, directory, or project.
-		 * @param {String} location The location of the file or directory to delete.
+		 * @param {String} deleteLocation The location of the file or directory to delete.
+		 * @public
+		 * @returns {Deferred} A deferred that will delete the given file
 		 */
-		deleteFile: function(location) {
-			return _doServiceCall(this._getService(location), "deleteFile", arguments); //$NON-NLS-0$
+		deleteFile: function(deleteLocation) {
+			return _doServiceCall(this._getService(deleteLocation), "deleteFile", arguments); //$NON-NLS-1$
 		},
 		
 		/**		 
 		 * Moves a file or directory.
 		 * @param {String} sourceLocation The location of the file or directory to move.
 		 * @param {String} targetLocation The location of the target folder.
-		 * @param {String} [name] The name of the destination file or directory in the case of a rename
+		 * @param {String} targetName The name of the destination file or directory in the case of a rename
+		 * @public
+		 * @returns {Deferred} A deferred that will move the given file to its new location
 		 */
-		moveFile: function(sourceLocation, targetLocation, name) {
+		moveFile: function(sourceLocation, targetLocation, targetName) {
 			var sourceService = this._getService(sourceLocation);
 			var targetService = this._getService(targetLocation);
 			
 			if (sourceService === targetService) {
-				return _doServiceCall(sourceService, "moveFile", arguments);				 //$NON-NLS-0$
+				return _doServiceCall(sourceService, "moveFile", arguments);				 //$NON-NLS-1$
 			}
 			
-			var isDirectory = sourceLocation[sourceLocation.length -1] === "/"; //$NON-NLS-0$
+			var isDirectory = sourceLocation[sourceLocation.length -1] === "/";
 			var target = targetLocation;
 			
-			if (target[target.length -1] !== "/") { //$NON-NLS-0$
-				target += "/"; //$NON-NLS-0$
+			if (target[target.length -1] !== "/") {
+				target += "/";
 			}
 			
-			if (name) {
-				target += encodeURIComponent(name);
+			if (targetName) {
+				target += encodeURIComponent(targetName);
 			} else {
 				var temp = sourceLocation;
 				if (isDirectory) {
 					temp = temp.substring(0, temp.length - 1);
 				}
-				target += temp.substring(temp.lastIndexOf("/")+1); //$NON-NLS-0$
+				target += temp.substring(temp.lastIndexOf("/")+1);
 			}
 			
-			if (isDirectory && target[target.length -1] !== "/") { //$NON-NLS-0$
-				target += "/"; //$NON-NLS-0$
+			if (isDirectory && target[target.length -1] !== "/") {
+				target += "/";
 			}
 	
 			return _copy(sourceService, sourceLocation, targetService, target).then(function() {
-				return _doServiceCall(sourceService, "deleteFile", [sourceLocation]); //$NON-NLS-0$
+				return _doServiceCall(sourceService, "deleteFile", [sourceLocation]); //$NON-NLS-1$
 			});
 			
 		},
@@ -7124,35 +7254,37 @@ define('orion/fileClient',['i18n!orion/navigate/nls/messages', "orion/Deferred",
 		 * Copies a file or directory.
 		 * @param {String} sourceLocation The location of the file or directory to copy.
 		 * @param {String} targetLocation The location of the target folder.
-		 * @param {String} [name] The name of the destination file or directory in the case of a rename
+		 * @param {String} targetName The name of the destination file or directory in the case of a rename
+		 * @public
+		 * @returns {Deferred} A deferred that will copy the given file to its new location
 		 */
-		copyFile: function(sourceLocation, targetLocation, name) {
+		copyFile: function(sourceLocation, targetLocation, targetName) {
 			var sourceService = this._getService(sourceLocation);
 			var targetService = this._getService(targetLocation);
 			
 			if (sourceService === targetService) {
-				return _doServiceCall(sourceService, "copyFile", arguments);				 //$NON-NLS-0$
+				return _doServiceCall(sourceService, "copyFile", arguments);				 //$NON-NLS-1$
 			}
 			
-			var isDirectory = sourceLocation[sourceLocation.length -1] === "/"; //$NON-NLS-0$
+			var isDirectory = sourceLocation[sourceLocation.length -1] === "/";
 			var target = targetLocation;
 			
-			if (target[target.length -1] !== "/") { //$NON-NLS-0$
-				target += "/"; //$NON-NLS-0$
+			if (target[target.length -1] !== "/") {
+				target += "/";
 			}
 			
-			if (name) {
-				target += encodeURIComponent(name);
+			if (targetName) {
+				target += encodeURIComponent(targetName);
 			} else {
 				var temp = sourceLocation;
 				if (isDirectory) {
 					temp = temp.substring(0, temp.length - 1);
 				}
-				target += temp.substring(temp.lastIndexOf("/")+1); //$NON-NLS-0$
+				target += temp.substring(temp.lastIndexOf("/")+1);
 			}
 			
-			if (isDirectory && target[target.length -1] !== "/") { //$NON-NLS-0$
-				target += "/"; //$NON-NLS-0$
+			if (isDirectory && target[target.length -1] !== "/") {
+				target += "/";
 			}
 
 			return _copy(sourceService, sourceLocation, targetService, target);
@@ -7161,35 +7293,38 @@ define('orion/fileClient',['i18n!orion/navigate/nls/messages', "orion/Deferred",
 		/**
 		 * Returns the contents or metadata of the file at the given location.
 		 *
-		 * @param {String} location The location of the file to get contents for
+		 * @param {String} readLocation The location of the file to get contents for
 		 * @param {Boolean} [isMetadata] If defined and true, returns the file metadata, 
 		 *   otherwise file contents are returned
-		 * @return A deferred that will be provided with the contents or metadata when available
+		 * @public
+		 * @return {Deferred} A deferred that will be provided with the contents or metadata when available
 		 */
-		read: function(location, isMetadata) {
-			return _doServiceCall(this._getService(location), "read", arguments); //$NON-NLS-0$
+		read: function(readLocation, isMetadata) {
+			return _doServiceCall(this._getService(readLocation), "read", arguments); //$NON-NLS-1$
 		},
 
 		/**
 		 * Returns the blob contents of the file at the given location.
 		 *
-		 * @param {String} location The location of the file to get contents for
-		 * @return A deferred that will be provided with the blob contents when available
+		 * @param {String} readLocation The location of the file to get contents for
+		 * @public
+		 * @return {Deferred} A deferred that will be provided with the blob contents when available
 		 */
-		readBlob: function(location) {
-			return _doServiceCall(this._getService(location), "readBlob", arguments); //$NON-NLS-0$
+		readBlob: function(readLocation) {
+			return _doServiceCall(this._getService(readLocation), "readBlob", arguments); //$NON-NLS-1$
 		},
 
 		/**
 		 * Writes the contents or metadata of the file at the given location.
 		 *
-		 * @param {String} location The location of the file to set contents for
+		 * @param {String} writeLocation The location of the file to set contents for
 		 * @param {String|Object} contents The content string, or metadata object to write
 		 * @param {String|Object} args Additional arguments used during write operation (i.e. ETag) 
-		 * @return A deferred for chaining events after the write completes with new metadata object
+		 * @public
+		 * @return {Deferred} A deferred for chaining events after the write completes with new metadata object
 		 */		
-		write: function(location, contents, args) {
-			return _doServiceCall(this._getService(location), "write", arguments); //$NON-NLS-0$
+		write: function(writeLocation, contents, args) {
+			return _doServiceCall(this._getService(writeLocation), "write", arguments); //$NON-NLS-1$
 		},
 
 		/**
@@ -7197,10 +7332,11 @@ define('orion/fileClient',['i18n!orion/navigate/nls/messages', "orion/Deferred",
 		 *
 		 * @param {String} targetLocation The location of the folder to import into
 		 * @param {Object} options An object specifying the import parameters
-		 * @return A deferred for chaining events after the import completes
+		 * @public
+		 * @return {Deferred} A deferred for chaining events after the import completes
 		 */		
 		remoteImport: function(targetLocation, options) {
-			return _doServiceCall(this._getService(targetLocation), "remoteImport", arguments); //$NON-NLS-0$
+			return _doServiceCall(this._getService(targetLocation), "remoteImport", arguments); //$NON-NLS-1$
 		},
 
 		/**
@@ -7208,10 +7344,23 @@ define('orion/fileClient',['i18n!orion/navigate/nls/messages', "orion/Deferred",
 		 *
 		 * @param {String} sourceLocation The location of the folder to export from
 		 * @param {Object} options An object specifying the export parameters
-		 * @return A deferred for chaining events after the export completes
+		 * @public
+		 * @return {Deferred} A deferred for chaining events after the export completes
 		 */		
 		remoteExport: function(sourceLocation, options) {
-			return _doServiceCall(this._getService(sourceLocation), "remoteExport", arguments); //$NON-NLS-0$
+			return _doServiceCall(this._getService(sourceLocation), "remoteExport", arguments); //$NON-NLS-1$
+		},
+		
+		/**
+		 * Find a string inside a file
+		 *
+		 * @param {String} sourceLocation The location of the folder to export from
+		 * @param {String} findStr The string to search
+		 * @public
+		 * @return {Deferred} A deferred for chaining events after the export completes
+		 */		
+		find: function(sourceLocation, findStr, option) {
+			return _doServiceCall(this._getService(location), "find", arguments); //$NON-NLS-0$
 		},
 		
 		/**
@@ -7225,15 +7374,17 @@ define('orion/fileClient',['i18n!orion/navigate/nls/messages', "orion/Deferred",
 		 * @param {Boolean} searchParams.regEx Optional. The option of regular expression search.
 		 * @param {integer} searchParams.start Optional. The zero based start number for the range of the returned hits. E.g if there are 1000 hits in total, then 5 means the 6th hit.
 		 * @param {integer} searchParams.rows Optional. The number of hits of the range. E.g if there are 1000 hits in total and start=5 and rows=40, then the return range is 6th-45th.
+		 * @public
 		 */
 		search: function(searchParams) {
-			return _doServiceCall(this._getService(searchParams.resource), "search", arguments); //$NON-NLS-0$
+			return _doServiceCall(this._getService(searchParams.resource), "search", arguments); //$NON-NLS-1$
 		}
-	};//end FileClient prototype
+	};
 	FileClient.prototype.constructor = FileClient;
 
-	//return the module exports
-	return {FileClient: FileClient};
+	return {
+		FileClient: FileClient
+	};
 });
 
 /*******************************************************************************
@@ -7818,6 +7969,8 @@ define('orion/edit/nls/root/messages',{
 	"Export": "Export",
 	"OpenWith": "Open With",
 	"OpenRelated": "Open Related",
+	"OpenFolder": "Open Folder",
+	"OpenFolderTip": "Change the root folder",
 	"Dependency": "Dependency",
 	"UnnamedCommand": "Unnamed",
 	"searchInFolder": "Folder Search...",
@@ -9944,7 +10097,7 @@ define("orion/regex", [], function() { //$NON-NLS-0$
 });
 
 /*******************************************************************************
- * Copyright (c) 2010, 2012 IBM Corporation and others.
+ * Copyright (c) 2010, 2016 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials are made 
  * available under the terms of the Eclipse Public License v1.0 
  * (http://www.eclipse.org/legal/epl-v10.html), and the Eclipse Distribution 
@@ -9956,7 +10109,7 @@ define("orion/regex", [], function() { //$NON-NLS-0$
  ******************************************************************************/
  
 /*eslint-env browser, amd*/
-define("orion/editor/eventTarget", [], function() { //$NON-NLS-0$
+define("orion/editor/eventTarget", [], function() {
 	/** 
 	 * Constructs a new EventTarget object.
 	 * 
@@ -10007,6 +10160,12 @@ define("orion/editor/eventTarget", [], function() { //$NON-NLS-0$
 			this._dispatchEvent(type, evt);
 			this._dispatchEvent("post" + type, evt); //$NON-NLS-0$
 		},
+		/**
+		 * Dispatches the given event to the listeners added to this event target.
+		 * @private 
+		 * @param {String} type The name of the event type to send
+		 * @param {Event} evt The event to dispatch.
+		 */
 		_dispatchEvent: function(type, evt) {
 			var state = this._eventTypes ? this._eventTypes[type] : null;
 			if (state) {
@@ -10017,9 +10176,9 @@ define("orion/editor/eventTarget", [], function() { //$NON-NLS-0$
 						for (var i=0, len=listeners.length; i < len; i++) {
 							if (listeners[i]) {
 								var l = listeners[i].listener;
-								if (typeof l === "function") { //$NON-NLS-0$
+								if (typeof l === "function") {
 									l.call(this, evt);
-								} else if (l.handleEvent && typeof l.handleEvent === "function") { //$NON-NLS-0$
+								} else if (l.handleEvent && typeof l.handleEvent === "function") {
 									l.handleEvent(evt);
 								}
 							}
@@ -10093,7 +10252,7 @@ define("orion/editor/eventTarget", [], function() { //$NON-NLS-0$
 
 /*******************************************************************************
  * @license
- * Copyright (c) 2010, 2012 IBM Corporation and others.
+ * Copyright (c) 2010, 2016 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials are made 
  * available under the terms of the Eclipse Public License v1.0 
  * (http://www.eclipse.org/legal/epl-v10.html), and the Eclipse Distribution 
@@ -10105,7 +10264,7 @@ define("orion/editor/eventTarget", [], function() { //$NON-NLS-0$
  ******************************************************************************/
  
 /*eslint-env browser, amd*/
-define("orion/editor/textModel", ['orion/editor/eventTarget', 'orion/regex', 'orion/util'], function(mEventTarget, mRegex, util) { //$NON-NLS-2$  //$NON-NLS-1$ //$NON-NLS-0$
+define("orion/editor/textModel", ['orion/editor/eventTarget', 'orion/regex', 'orion/util'], function(mEventTarget, mRegex, util) {
 
 	/**
 	 * Constructs a new TextModel with the given text and default line delimiter.
@@ -10195,7 +10354,7 @@ define("orion/editor/textModel", ['orion/editor/eventTarget', 'orion/regex', 'or
 					* insensitive mode. The fix is to detect the presence of Turkish i's in the search pattern and 
 					* to modify the pattern to search for both upper and lower case.
 					*/
-					if (caseInsensitive) {  //$NON-NLS-1$ //$NON-NLS-0$
+					if (caseInsensitive) {
 						pattern = pattern.replace(/[iI\u0130\u0131]/g, "[Ii\u0130\u0131]"); //$NON-NLS-0$
 					}
 				}
@@ -10207,14 +10366,14 @@ define("orion/editor/textModel", ['orion/editor/eventTarget', 'orion/regex', 'or
 				var wholeWord = options.wholeWord;
 				var start = options.start || 0;
 				var end = options.end;
-				var isRange = (end !== null && end !== undefined);
-				if (flags.indexOf("g") === -1) { flags += "g"; } //$NON-NLS-1$ //$NON-NLS-0$
-				if (flags.indexOf("m") === -1) { flags += "m"; } //$NON-NLS-1$ //$NON-NLS-0$
+				var isRange = end !== null && end !== undefined;
+				if (flags.indexOf("g") === -1) { flags += "g"; } //$NON-NLS-1$ //$NON-NLS-2$
+				if (flags.indexOf("m") === -1) { flags += "m"; } //$NON-NLS-1$ //$NON-NLS-2$
 				if (caseInsensitive) {
-					if (flags.indexOf("i") === -1) { flags += "i"; } //$NON-NLS-1$ //$NON-NLS-0$
+					if (flags.indexOf("i") === -1) { flags += "i"; } //$NON-NLS-1$ //$NON-NLS-2$
 				}
 				if (wholeWord) {
-					pattern = "\\b" + pattern + "\\b"; //$NON-NLS-1$ //$NON-NLS-0$
+					pattern = "\\b" + pattern + "\\b"; //$NON-NLS-1$ //$NON-NLS-2$
 				}
 				var text = this._text[0], result, lastIndex, offset = 0;
 				if (isRange) {
@@ -10278,11 +10437,17 @@ define("orion/editor/textModel", ['orion/editor/eventTarget', 'orion/regex', 'or
 				current = skip();
 			}
 			return {
+				/**
+				 * @callback 
+				 */
 				next: function() {
 					var result = current;
 					if (result) { current = skip(); }
 					return result;					
 				},
+				/**
+				 * @callback 
+				 */
 				hasNext: function() {
 					return current !== null;
 				}
@@ -10554,7 +10719,7 @@ define("orion/editor/textModel", ['orion/editor/eventTarget', 'orion/regex', 'or
 		 * @param {Boolean} [all=false] whether or not the delimiter of existing lines are changed.
 		 */
 		setLineDelimiter: function(lineDelimiter, all) {
-			if (lineDelimiter === "auto") { //$NON-NLS-0$
+			if (lineDelimiter === "auto") {
 				lineDelimiter = undefined;
 				if (this.getLineCount() > 1) {
 					lineDelimiter = this.getText(this.getLineEnd(0), this.getLineEnd(0, true));
@@ -12641,6 +12806,7 @@ define('orion/editorCommands',[
 			this._createDelimiterCommands();
 			this._createEncodingCommand();
 			this._createSaveCommand();
+			this._createOpenFolderCommand();
 			return this._createEditCommands();
 		},
 		//TODO: We need a better way invoke side bar action 
@@ -12700,6 +12866,7 @@ define('orion/editorCommands',[
 			commandRegistry.registerCommandContribution("settingsActions", "orion.edit.settings", 1, null, false, new mKeyBinding.KeyBinding("s", true, true), null, this); //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-0$
 			commandRegistry.registerCommandContribution(this.editToolbarId || this.toolbarId, "orion.edit.undo", 400, this.editToolbarId ? "orion.menuBarEditGroup/orion.edit.undoGroup" : null, !this.editToolbarId, new mKeyBinding.KeyBinding('z', true), null, this); //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-3$
 			commandRegistry.registerCommandContribution(this.editToolbarId || this.toolbarId, "orion.edit.redo", 401, this.editToolbarId ? "orion.menuBarEditGroup/orion.edit.undoGroup" : null, !this.editToolbarId, util.isMac ? new mKeyBinding.KeyBinding('z', true, true) : new mKeyBinding.KeyBinding('y', true), null, this); //$NON-NLS-3$ //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-4$
+			commandRegistry.registerCommandContribution(this.saveToolbarId || this.toolbarId, "orion.edit.openFolder", 1, this.saveToolbarId ? "orion.menuBarFileGroup/orion.edit.saveGroup" : null, false, new mKeyBinding.KeyBinding('o', true)); //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-0$
 			commandRegistry.registerCommandContribution(this.saveToolbarId || this.toolbarId, "orion.openResource", 1, this.saveToolbarId ? "orion.menuBarFileGroup/orion.edit.saveGroup" : null, false, new mKeyBinding.KeyBinding('f', true, true)); //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-0$
 			commandRegistry.registerCommandContribution(this.saveToolbarId || this.toolbarId, "orion.edit.save", 2, this.saveToolbarId ? "orion.menuBarFileGroup/orion.edit.saveGroup" : null, false, new mKeyBinding.KeyBinding('s', true), null, this); //$NON-NLS-3$ //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-3$
 			commandRegistry.registerCommandContribution(this.editToolbarId || this.pageNavId, "orion.edit.gotoLine", 3, this.editToolbarId ? "orion.menuBarEditGroup/orion.findGroup" : null, !this.editToolbarId, new mKeyBinding.KeyBinding('l', !util.isMac, false, false, util.isMac), new mCommandRegistry.URLBinding("gotoLine", "line"), this); //$NON-NLS-4$ //$NON-NLS-3$ //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-5$
@@ -13080,6 +13247,26 @@ define('orion/editorCommands',[
 				}
 			});
 			this.commandService.addCommand(saveCommand);
+		},
+		_createOpenFolderCommand: function() {
+			var that = this;
+			var openFolderCommand = new mCommands.Command({
+				name: messages.OpenFolder,
+				tooltip: messages.OpenFolderTip,
+				id: "orion.edit.openFolder", //$NON-NLS-0$
+				visibleWhen: /** @callback */ function(items, data) {
+					return !!window.__dialogModule;
+				},
+				callback: function() {
+					window.__dialogModule.showOpenDialog({properties: ['openDirectory']}, function(result) {
+						if (!result) return;
+						that.fileClient.changeWorkspace(result[0]).then(function() {
+							window.location.reload();
+						});
+					});
+				}
+			});
+			this.commandService.addCommand(openFolderCommand);
 		},
 		_createEncodingCommand: function() {
 			var that = this;
@@ -16123,6 +16310,645 @@ define('orion/explorers/navigatorRenderer',[], function() {
 });
 /*******************************************************************************
  * @license
+ * Copyright (c) 2010, 2012 IBM Corporation and others.
+ * All rights reserved. This program and the accompanying materials are made 
+ * available under the terms of the Eclipse Public License v1.0 
+ * (http://www.eclipse.org/legal/epl-v10.html), and the Eclipse Distribution 
+ * License v1.0 (http://www.eclipse.org/org/documents/edl-v10.html). 
+ * 
+ * Contributors: 
+ *		Felipe Heidrich (IBM Corporation) - initial API and implementation
+ *		Silenio Quarti (IBM Corporation) - initial API and implementation
+ ******************************************************************************/
+
+/*eslint-env browser, amd*/
+define("orion/editor/projectionTextModel", ['orion/editor/textModel', 'orion/editor/eventTarget'], function(mTextModel, mEventTarget) { //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-0$
+
+	/**
+	 * @class This object represents a projection range. A projection specifies a
+	 * range of text and the replacement text. The range of text is relative to the
+	 * base text model associated to a projection model.
+	 * <p>
+	 * <b>See:</b><br/>
+	 * {@link orion.editor.ProjectionTextModel}<br/>
+	 * {@link orion.editor.ProjectionTextModel#addProjection}<br/>
+	 * </p>		 
+	 * @name orion.editor.Projection
+	 * 
+	 * @property {Number} start The start offset of the projection range. 
+	 * @property {Number} end The end offset of the projection range. This offset is exclusive.
+	 * @property {String|orion.editor.TextModel} [text=""] The projection text to be inserted
+	 */
+	/**
+	 * Constructs a new <code>ProjectionTextModel</code> based on the specified <code>TextModel</code>.
+	 *
+	 * @param {orion.editor.TextModel} baseModel The base text model.
+	 *
+	 * @name orion.editor.ProjectionTextModel
+	 * @class The <code>ProjectionTextModel</code> represents a projection of its base text
+	 * model. Projection ranges can be added to the projection text model to hide and/or insert
+	 * ranges to the base text model.
+	 * <p>
+	 * The contents of the projection text model is modified when changes occur in the base model,
+	 * projection model or by calls to {@link #addProjection} and {@link #removeProjection}.
+	 * </p>
+	 * <p>
+	 * <b>See:</b><br/>
+	 * {@link orion.editor.TextView}<br/>
+	 * {@link orion.editor.TextModel}
+	 * {@link orion.editor.TextView#setModel}
+	 * </p>
+	 * @borrows orion.editor.EventTarget#addEventListener as #addEventListener
+	 * @borrows orion.editor.EventTarget#removeEventListener as #removeEventListener
+	 * @borrows orion.editor.EventTarget#dispatchEvent as #dispatchEvent
+	 */
+	function ProjectionTextModel(baseModel) {
+		this._model = baseModel;
+		this._projections = [];
+		var self = this;
+		this._listener = {
+			onChanged: function(e) {
+				self._onChanged(e);
+			},
+			onChanging: function(e) {
+				self._onChanging(e);
+			}
+		};
+		baseModel.addEventListener("postChanged", this._listener.onChanged); //$NON-NLS-0$
+		baseModel.addEventListener("preChanging", this._listener.onChanging); //$NON-NLS-0$
+	}
+
+	ProjectionTextModel.prototype = /** @lends orion.editor.ProjectionTextModel.prototype */ {
+		/**
+		 * Destroys this projection text model.
+		 */
+		destroy: function() {
+			if (this._model) {
+				this._model.removeEventListener("postChanged", this._listener.onChanged); //$NON-NLS-0$
+				this._model.removeEventListener("preChanging", this._listener.onChanging); //$NON-NLS-0$
+				this._model = null;
+			}
+		},
+		/**
+		 * Adds a projection range to the model.
+		 * <p>
+		 * The model must notify the listeners before and after the the text is
+		 * changed by calling {@link #onChanging} and {@link #onChanged} respectively. 
+		 * </p>
+		 * @param {orion.editor.Projection} projection The projection range to be added.
+		 * 
+		 * @see orion.editor.ProjectionTextModel#removeProjection
+		 */
+		addProjection: function(projection) {
+			if (!projection) {return;}
+			//start and end can't overlap any exist projection
+			var model = this._model, projections = this._projections;
+			projection._lineIndex = model.getLineAtOffset(projection.start);
+			projection._lineCount = model.getLineAtOffset(projection.end) - projection._lineIndex;
+			var text = projection.text;
+			if (!text) { text = ""; }
+			if (typeof text === "string") { //$NON-NLS-0$
+				projection._model = new mTextModel.TextModel(text, model.getLineDelimiter());
+			} else {
+				projection._model = text;
+			}
+			var eventStart = this.mapOffset(projection.start, true);
+			var removedCharCount = projection.end - projection.start;
+			var removedLineCount = projection._lineCount;
+			var addedCharCount = projection._model.getCharCount();
+			var addedLineCount = projection._model.getLineCount() - 1;
+			var modelChangingEvent = {
+				type: "Changing", //$NON-NLS-0$
+				text: projection._model.getText(),
+				start: eventStart,
+				removedCharCount: removedCharCount,
+				addedCharCount: addedCharCount,
+				removedLineCount: removedLineCount,
+				addedLineCount: addedLineCount
+			};
+			this.onChanging(modelChangingEvent);
+			var index = this._binarySearch(projections, projection.start);
+			projections.splice(index, 0, projection);
+			var modelChangedEvent = {
+				type: "Changed", //$NON-NLS-0$
+				start: eventStart,
+				removedCharCount: removedCharCount,
+				addedCharCount: addedCharCount,
+				removedLineCount: removedLineCount,
+				addedLineCount: addedLineCount
+			};
+			this.onChanged(modelChangedEvent);
+		},
+		/**
+		 * Returns all projection ranges of this model.
+		 * 
+		 * @return {orion.editor.Projection[]} The projection ranges.
+		 * 
+		 * @see orion.editor.ProjectionTextModel#addProjection
+		 */
+		getProjections: function() {
+			return this._projections.slice(0);
+		},
+		/**
+		 * Gets the base text model.
+		 *
+		 * @return {orion.editor.TextModel} The base text model.
+		 */
+		getBaseModel: function() {
+			return this._model;
+		},
+		/**
+		 * Maps offsets between the projection model and its base model.
+		 *
+		 * @param {Number} offset The offset to be mapped.
+		 * @param {Boolean} [baseOffset=false] <code>true</code> if <code>offset</code> is in base model and
+		 *	should be mapped to the projection model.
+		 * @return {Number} The mapped offset
+		 */
+		mapOffset: function(offset, baseOffset) {
+			var projections = this._projections, delta = 0, i, projection;
+			if (baseOffset) {
+				for (i = 0; i < projections.length; i++) {
+					projection = projections[i];
+					if (projection.start > offset) { break; }
+					if (projection.end > offset) { return -1; }
+					delta += projection._model.getCharCount() - (projection.end - projection.start);
+				}
+				return offset + delta;
+			}
+			for (i = 0; i < projections.length; i++) {
+				projection = projections[i];
+				if (projection.start > offset - delta) { break; }
+				var charCount = projection._model.getCharCount();
+				if (projection.start + charCount > offset - delta) {
+					return -1;
+				}
+				delta += charCount - (projection.end - projection.start);
+			}
+			return offset - delta;
+		},
+		/**
+		 * Removes a projection range from the model.
+		 * <p>
+		 * The model must notify the listeners before and after the the text is
+		 * changed by calling {@link #onChanging} and {@link #onChanged} respectively. 
+		 * </p>
+		 * 
+		 * @param {orion.editor.Projection} projection The projection range to be removed.
+		 * 
+		 * @see orion.editor.ProjectionTextModel#addProjection
+		 */
+		removeProjection: function(projection) {
+			this._removeProjection(projection);
+		},
+		_removeProjection: function(projection, noEvents) {
+			var i, delta = 0;
+			for (i = 0; i < this._projections.length; i++) {
+				var p = this._projections[i];
+				if (p === projection) {
+					projection = p;
+					break;
+				}
+				delta += p._model.getCharCount() - (p.end - p.start);
+			}
+			if (i < this._projections.length) {
+				var model = this._model;
+				var eventStart = projection.start + delta;
+				var addedCharCount = projection.end - projection.start;
+				var addedLineCount = projection._lineCount;
+				var removedCharCount = projection._model.getCharCount();
+				var removedLineCount = projection._model.getLineCount() - 1;
+				if (!noEvents) {
+					var modelChangingEvent = {
+						type: "Changing", //$NON-NLS-0$
+						text: model.getText(projection.start, projection.end),
+						start: eventStart,
+						removedCharCount: removedCharCount,
+						addedCharCount: addedCharCount,
+						removedLineCount: removedLineCount,
+						addedLineCount: addedLineCount
+					};
+					this.onChanging(modelChangingEvent);
+				}
+				this._projections.splice(i, 1);
+				if (!noEvents) {
+					var modelChangedEvent = {
+						type: "Changed", //$NON-NLS-0$
+						start: eventStart,
+						removedCharCount: removedCharCount,
+						addedCharCount: addedCharCount,
+						removedLineCount: removedLineCount,
+						addedLineCount: addedLineCount
+					};
+					this.onChanged(modelChangedEvent);
+				}
+			}
+		},
+		/** @ignore */
+		_binarySearch: function (array, offset) {
+			var high = array.length, low = -1, index;
+			while (high - low > 1) {
+				index = Math.floor((high + low) / 2);
+				if (offset <= array[index].start) {
+					high = index;
+				} else {
+					low = index;
+				}
+			}
+			return high;
+		},
+		/**
+		 * @see orion.editor.TextModel#getCharCount
+		 */
+		getCharCount: function() {
+			var count = this._model.getCharCount(), projections = this._projections;
+			for (var i = 0; i < projections.length; i++) {
+				var projection = projections[i];
+				count += projection._model.getCharCount() - (projection.end - projection.start);
+			}
+			return count;
+		},
+		/**
+		 * @see orion.editor.TextModel#getLine
+		 */
+		getLine: function(lineIndex, includeDelimiter) {
+			if (lineIndex < 0) { return null; }
+			var model = this._model, projections = this._projections;
+			var delta = 0, result = [], offset = 0, i, lineCount, projection;
+			for (i = 0; i < projections.length; i++) {
+				projection = projections[i];
+				if (projection._lineIndex >= lineIndex - delta) { break; }
+				lineCount = projection._model.getLineCount() - 1;
+				if (projection._lineIndex + lineCount >= lineIndex - delta) {
+					var projectionLineIndex = lineIndex - (projection._lineIndex + delta);
+					if (projectionLineIndex < lineCount) {
+						return projection._model.getLine(projectionLineIndex, includeDelimiter);
+					} else {
+						result.push(projection._model.getLine(lineCount));
+					}
+				}
+				offset = projection.end;
+				delta += lineCount - projection._lineCount;
+			}
+			offset = Math.max(offset, model.getLineStart(lineIndex - delta));
+			for (; i < projections.length; i++) {
+				projection = projections[i];
+				if (projection._lineIndex > lineIndex - delta) { break; }
+				result.push(model.getText(offset, projection.start));
+				lineCount = projection._model.getLineCount() - 1;
+				if (projection._lineIndex + lineCount > lineIndex - delta) {
+					result.push(projection._model.getLine(0, includeDelimiter));
+					return result.join("");
+				}
+				result.push(projection._model.getText());
+				offset = projection.end;
+				delta += lineCount - projection._lineCount;
+			}
+			var end = model.getLineEnd(lineIndex - delta, includeDelimiter);
+			if (offset < end) {
+				result.push(model.getText(offset, end));
+			}
+			return result.join("");
+		},
+		/**
+		 * @see orion.editor.TextModel#getLineAtOffset
+		 */
+		getLineAtOffset: function(offset) {
+			var model = this._model, projections = this._projections;
+			var delta = 0, lineDelta = 0;
+			for (var i = 0; i < projections.length; i++) {
+				var projection = projections[i];
+				if (projection.start > offset - delta) { break; }
+				var charCount = projection._model.getCharCount();
+				if (projection.start + charCount > offset - delta) {
+					var projectionOffset = offset - (projection.start + delta);
+					lineDelta += projection._model.getLineAtOffset(projectionOffset);
+					delta += projectionOffset;
+					break;
+				}
+				lineDelta += projection._model.getLineCount() - 1 - projection._lineCount;
+				delta += charCount - (projection.end - projection.start);
+			}
+			return model.getLineAtOffset(offset - delta) + lineDelta;
+		},
+		/**
+		 * @see orion.editor.TextModel#getLineCount
+		 */
+		getLineCount: function() {
+			var model = this._model, projections = this._projections;
+			var count = model.getLineCount();
+			for (var i = 0; i < projections.length; i++) {
+				var projection = projections[i];
+				count += projection._model.getLineCount() - 1 - projection._lineCount;
+			}
+			return count;
+		},
+		/**
+		 * @see orion.editor.TextModel#getLineDelimiter
+		 */
+		getLineDelimiter: function() {
+			return this._model.getLineDelimiter();
+		},
+		/**
+		 * @see orion.editor.TextModel#getLineEnd
+		 */
+		getLineEnd: function(lineIndex, includeDelimiter) {
+			if (lineIndex < 0) { return -1; }
+			var model = this._model, projections = this._projections;
+			var delta = 0, offsetDelta = 0;
+			for (var i = 0; i < projections.length; i++) {
+				var projection = projections[i];
+				if (projection._lineIndex > lineIndex - delta) { break; }
+				var lineCount = projection._model.getLineCount() - 1;
+				if (projection._lineIndex + lineCount > lineIndex - delta) {
+					var projectionLineIndex = lineIndex - (projection._lineIndex + delta);
+					return projection._model.getLineEnd (projectionLineIndex, includeDelimiter) + projection.start + offsetDelta;
+				}
+				offsetDelta += projection._model.getCharCount() - (projection.end - projection.start);
+				delta += lineCount - projection._lineCount;
+			}
+			return model.getLineEnd(lineIndex - delta, includeDelimiter) + offsetDelta;
+		},
+		/**
+		 * @see orion.editor.TextModel#getLineStart
+		 */
+		getLineStart: function(lineIndex) {
+			if (lineIndex < 0) { return -1; }
+			var model = this._model, projections = this._projections;
+			var delta = 0, offsetDelta = 0;
+			for (var i = 0; i < projections.length; i++) {
+				var projection = projections[i];
+				if (projection._lineIndex >= lineIndex - delta) { break; }
+				var lineCount = projection._model.getLineCount() - 1;
+				if (projection._lineIndex + lineCount >= lineIndex - delta) {
+					var projectionLineIndex = lineIndex - (projection._lineIndex + delta);
+					return projection._model.getLineStart (projectionLineIndex) + projection.start + offsetDelta;
+				}
+				offsetDelta += projection._model.getCharCount() - (projection.end - projection.start);
+				delta += lineCount - projection._lineCount;
+			}
+			return model.getLineStart(lineIndex - delta) + offsetDelta;
+		},
+		/**
+		 * @see orion.editor.TextModel#getText
+		 */
+		getText: function(start, end) {
+			if (start === undefined) { start = 0; }
+			var model = this._model, projections = this._projections;
+			var delta = 0, result = [], i, projection, charCount;
+			for (i = 0; i < projections.length; i++) {
+				projection = projections[i];
+				if (projection.start > start - delta) { break; }
+				charCount = projection._model.getCharCount();
+				if (projection.start + charCount > start - delta) {
+					if (end !== undefined && projection.start + charCount > end - delta) {
+						return projection._model.getText(start - (projection.start + delta), end - (projection.start + delta));
+					} else {
+						result.push(projection._model.getText(start - (projection.start + delta)));
+						start = projection.end + delta + charCount - (projection.end - projection.start);
+					}
+				}
+				delta += charCount - (projection.end - projection.start);
+			}
+			var offset = start - delta;
+			if (end !== undefined) {
+				for (; i < projections.length; i++) {
+					projection = projections[i];
+					if (projection.start > end - delta) { break; }
+					result.push(model.getText(offset, projection.start));
+					charCount = projection._model.getCharCount();
+					if (projection.start + charCount > end - delta) {
+						result.push(projection._model.getText(0, end - (projection.start + delta)));
+						return result.join("");
+					}
+					result.push(projection._model.getText());
+					offset = projection.end;
+					delta += charCount - (projection.end - projection.start);
+				}
+				result.push(model.getText(offset, end - delta));
+			} else {
+				for (; i < projections.length; i++) {
+					projection = projections[i];
+					result.push(model.getText(offset, projection.start));
+					result.push(projection._model.getText());
+					offset = projection.end;
+				}
+				result.push(model.getText(offset));
+			}
+			return result.join("");
+		},
+		/** @ignore */
+		_onChanged: function(modelChangedEvent) {
+			var change = this._change;
+			var start = change.baseStart, end = change.baseEnd, i;
+			var projection, projections = this._projections;
+			for (i = 0; i < projections.length; i++) {
+				projection = projections[i];
+				if (projection.end > start) { break; }
+			}
+			var rangeStart = i;
+			for (i = 0; i < projections.length; i++) {
+				projection = projections[i];
+				if (projection.start >= end) { break; }
+			}
+			var rangeEnd = i;
+			var model = this._model;
+			var changeCount = change.baseText.length - (end - start);
+			for (i = rangeEnd; i < projections.length; i++) {
+				projection = projections[i];
+				projection.start += changeCount;
+				projection.end += changeCount;
+				projection._lineIndex = model.getLineAtOffset(projection.start);
+			}
+			var removed = projections.splice(rangeStart, rangeEnd - rangeStart);
+			for (i = 0; i < removed.length; i++) {
+				if (removed[i].annotation) {
+					removed[i].annotation._expand();
+				}
+			}
+			var modelChangedEvent1 = {
+				type: "Changed", //$NON-NLS-0$
+				start: change.start,
+				removedCharCount: change.removedCharCount,
+				addedCharCount: change.addedCharCount,
+				removedLineCount: change.removedLineCount,
+				addedLineCount: change.addedLineCount
+			};
+			this.onChanged(modelChangedEvent1);
+			this._change = undefined;
+		},
+		_onChanging: function(modelChangingEvent) {
+			var hasChange = !!this._change;
+			var change = this._change || {};
+			var start = modelChangingEvent.start, end = start + modelChangingEvent.removedCharCount;
+			change.baseStart = start;
+			change.baseEnd = end;
+			change.baseText = modelChangingEvent.text;
+			change.addedLineCount = modelChangingEvent.addedLineCount;
+			if (!hasChange) {
+				this._change = change;
+				change.text = modelChangingEvent.text;
+				var projections = this._projections, delta, i, projection;
+				function mapOffset(offset) {
+					for (i = 0, delta = 0; i < projections.length; i++) {
+						projection = projections[i];
+						if (projection.start > offset) { break; }
+						if (projection.end > offset) { return -1; }
+						delta += projection._model.getCharCount() - (projection.end - projection.start);
+					}
+					return offset + delta;
+				}
+				change.start = mapOffset(start);
+				if (change.start === -1) {
+					change.text = this._model.getText(projection.start, start) + change.text;
+					change.addedLineCount += this._model.getLineAtOffset(start) - this._model.getLineAtOffset(projection.start);
+					change.start = projection.start + delta;
+				}
+				change.end = mapOffset(end);
+				if (change.end === -1) {
+					change.text += this._model.getText(end, projection.end);
+					change.addedLineCount += this._model.getLineAtOffset(projection.end) - this._model.getLineAtOffset(end);
+					change.end = projection.start + delta;
+				}
+			}
+			change.addedCharCount = change.text.length;
+			change.removedCharCount = change.end - change.start;
+			change.removedLineCount = this.getLineAtOffset(change.end) - this.getLineAtOffset(change.start);
+			var modelChangingEvent1 = {
+				type: "Changing", //$NON-NLS-0$
+				text: change.text,
+				start: change.start,
+				removedCharCount: change.removedCharCount,
+				addedCharCount: change.addedCharCount,
+				removedLineCount: change.removedLineCount,
+				addedLineCount: change.addedLineCount
+			};
+			this.onChanging(modelChangingEvent1);
+		},
+		/**
+		 * @see orion.editor.TextModel#onChanging
+		 */
+		onChanging: function(modelChangingEvent) {
+			return this.dispatchEvent(modelChangingEvent);
+		},
+		/**
+		 * @see orion.editor.TextModel#onChanged
+		 */
+		onChanged: function(modelChangedEvent) {
+			return this.dispatchEvent(modelChangedEvent);
+		},
+		/**
+		 * @see orion.editor.TextModel#setLineDelimiter
+		 */
+		setLineDelimiter: function(lineDelimiter) {
+			this._model.setLineDelimiter(lineDelimiter);
+		},
+		/**
+		 * @see orion.editor.TextModel#setText
+		 */
+		setText: function(text, start, end) {
+			this._change = {
+				text: text || "",
+				start: start || 0,
+				end: end === undefined ? this.getCharCount() : end
+			};
+			var projections = this._projections, delta, i, projection;
+			function mapOffset(offset) {
+				for (i = 0, delta = 0; i < projections.length; i++) {
+					projection = projections[i];
+					if (projection.start > offset - delta) { break; }
+					var charCount = projection._model.getCharCount();
+					if (projection.start + charCount > offset - delta) {
+						return -1;
+					}
+					delta += charCount - (projection.end - projection.start);
+				}
+				return offset - delta;
+			}
+			var startProjection, endProjection;
+			var mapStart = mapOffset(this._change.start);
+			if (mapStart === -1) {
+				startProjection = {
+					projection: projection,
+					start: this._change.start - (projection.start + delta)
+				};
+				mapStart = projection.end;
+			}
+			var mapEnd = mapOffset(this._change.end);
+			if (mapEnd === -1) {
+				endProjection = {
+					projection: projection,
+					end: this._change.end - (projection.start + delta)
+				};
+				mapEnd = projection.start;
+			}
+			if (startProjection && endProjection && startProjection.projection === endProjection.projection) {
+				//TODO events - special case - change is completely inside of a projection
+				projection._model.setText(this._change.text, startProjection.start, endProjection.end);
+			} else {
+				this._model.setText(this._change.text, mapStart, mapEnd);
+				if (startProjection) {
+					projection = startProjection.projection;
+					projection._model.setText("", startProjection.start);
+				}		
+				if (endProjection) {
+					projection = endProjection.projection;
+					projection._model.setText("", 0, endProjection.end);
+					projection.start = projection.end;
+					projection._lineCount = 0;
+				}
+			}
+			this._change = undefined;
+		}
+	};
+	mEventTarget.EventTarget.addMixin(ProjectionTextModel.prototype);
+
+	return {ProjectionTextModel: ProjectionTextModel};
+});
+
+/*******************************************************************************
+ * @license
+ * Copyright (c) 2016 IBM Corporation and others.
+ * All rights reserved. This program and the accompanying materials are made 
+ * available under the terms of the Eclipse Public License v1.0 
+ * (http://www.eclipse.org/legal/epl-v10.html), and the Eclipse Distribution 
+ * License v1.0 (http://www.eclipse.org/org/documents/edl-v10.html). 
+ *
+ * Contributors: IBM Corporation - initial API and implementation
+ *******************************************************************************/
+/*eslint-env browser, amd*/
+define('orion/editor/textModelFactory',[
+	'orion/editor/textModel',
+	'orion/editor/projectionTextModel'
+], function(mTextModel, mProjectionTextModel) {
+	
+	/**
+	 * TextModelFactory generates all the base text model and projection model for the editors
+	 */
+	function TextModelFactory() {
+	}
+	TextModelFactory.prototype = {
+		/**
+		 * Create a text model instance for editor. A customized TextModelFactory can return a sub class of mTextModel.TextModel.
+		 */
+		createTextModel: function(/*options*/) {
+			return new mTextModel.TextModel();
+		},
+		/**
+		 * Create a projection text model instance for editor. A customized TextModelFactory can create a sub class of mTextModel.TextModel 
+		 * or a sub class of mProjectionTextModel.ProjectionTextModel.
+		 */
+		createProjectionTextModel: function(baseModel, options) {
+			return new mProjectionTextModel.ProjectionTextModel(baseModel ? baseModel: this.createTextModel(options));
+		}
+	};
+	return {
+		TextModelFactory: TextModelFactory
+	};
+});
+
+/*******************************************************************************
+ * @license
  * Copyright (c) 2010, 2013 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials are made
  * available under the terms of the Eclipse Public License v1.0
@@ -16142,8 +16968,9 @@ define('orion/inputManager',[
 	'orion/EventTarget',
 	'orion/objects',
 	'orion/PageUtil',
+	'orion/editor/textModelFactory',
 	'orion/metrics'
-], function(messages, mNavigatorRenderer, i18nUtil, Deferred, EventTarget, objects, PageUtil, mMetrics) {
+], function(messages, mNavigatorRenderer, i18nUtil, Deferred, EventTarget, objects, PageUtil, mTextModelFactory, mMetrics) {
 
 	function Idle(options){
 		this._document = options.document || document;
@@ -16345,7 +17172,7 @@ define('orion/inputManager',[
 						statusService = this.statusService;
 					}
 					handleError(statusService, error);
-					this._setNoInput();
+					this._setNoInput(true);
 				}.bind(this);
 				this._acceptPatch = null;
 				// Read metadata
@@ -16371,7 +17198,13 @@ define('orion/inputManager',[
 						var isText = this._isText(metadata);
 						if (isUTF8(charset) && isText) {
 							// Read text contents
-							progress(fileClient.read(resource, false, true), messages.Reading, fileURI).then(function(contents) {
+							var defaultReadOptions, textModelFactory = new mTextModelFactory.TextModelFactory();
+							//If textModelFactory support additional options for reading text contents, we need to use it.
+							//An example is to support large file, whose contents is read by segments
+							if(typeof textModelFactory.getDefaultReadOptions === "function") {
+								defaultReadOptions = textModelFactory.getDefaultReadOptions();
+							}
+							progress(fileClient.read(resource, false, true, defaultReadOptions), messages.Reading, fileURI).then(function(contents) {
 								clearProgressTimeout();
 								if (typeof contents !== "string") { //$NON-NLS-0$
 									this._acceptPatch = contents.acceptPatch;
@@ -16779,6 +17612,9 @@ define('orion/inputManager',[
 				if (editor && editor.getTextView && editor.getTextView()) {
 					var textView = editor.getTextView();
 					textView.addEventListener("Focus", this._focusListener = this.onFocus.bind(this)); //$NON-NLS-0$
+					if(editor.getModel() && typeof  editor.getModel().setModelData === "function") {
+						editor.getModel().setModelData({	 metadata: metadata});
+					}
 				}
 				this._clearUnsavedChanges();
 				if (!this.processParameters(input)) {
@@ -18166,7 +19002,6 @@ define("orion/editor/textView", [  //$NON-NLS-1$
 				applyStyle(e.style, lineDiv, div);
 				if (div) { div._trim = null; }
 				lineDiv.viewStyle = e.style;
-				lineDiv.setAttribute("role", "presentation"); //$NON-NLS-1$ //$NON-NLS-2$
 			}
 			lineDiv.lineIndex = lineIndex;
 			
@@ -23333,8 +24168,6 @@ define("orion/editor/textView", [  //$NON-NLS-1$
 				(this._clipDiv || rootDiv).appendChild(overlayDiv);
 			}
 			clientDiv.contentEditable = "true"; //$NON-NLS-1$
-			clientDiv.setAttribute("role", "textbox"); //$NON-NLS-1$ //$NON-NLS-2$
-			clientDiv.setAttribute("aria-multiline", "true"); //$NON-NLS-1$ //$NON-NLS-2$
 			this._setWrapMode(this._wrapMode, true);
 			this._setReadOnly(this._readonly);
 			this._setThemeClass(this._themeClass, true);
@@ -23829,7 +24662,13 @@ define("orion/editor/textView", [  //$NON-NLS-1$
 			handlers.push({target: clientDiv, type: "blur", handler: function(e) { return that._handleBlur(e ? e : win.event);}}); //$NON-NLS-1$
 			handlers.push({target: clientDiv, type: "focus", handler: function(e) { return that._handleFocus(e ? e : win.event);}}); //$NON-NLS-1$
 			handlers.push({target: viewDiv, type: "focus", handler: function() { clientDiv.focus(); }}); //$NON-NLS-1$
-			handlers.push({target: viewDiv, type: "scroll", handler: function(e) { return that._handleScroll(e ? e : win.event);}}); //$NON-NLS-1$
+			var textModel = that.getModel();
+			if(textModel && typeof textModel.deferScroll === "function") {//If textModel is extended to defer the scroll handler for segmental contents
+				var deferredHandler = textModel.deferScroll(that, that._handleScroll.bind(that));
+				handlers.push({target: viewDiv, type: "scroll", handler: function(e) { return deferredHandler(e ? e : win.event);}}); //$NON-NLS-0$
+			} else {
+				handlers.push({target: viewDiv, type: "scroll", handler: function(e) { return that._handleScroll(e ? e : win.event);}}); //$NON-NLS-1$
+			}
 			handlers.push({target: clientDiv, type: "textInput", handler: function(e) { return that._handleTextInput(e ? e : win.event); }}); //$NON-NLS-1$
 			handlers.push({target: clientDiv, type: "keydown", handler: function(e) { return that._handleKeyDown(e ? e : win.event);}}); //$NON-NLS-1$
 			handlers.push({target: clientDiv, type: "keypress", handler: function(e) { return that._handleKeyPress(e ? e : win.event);}}); //$NON-NLS-1$
@@ -24570,7 +25409,6 @@ define("orion/editor/textView", [  //$NON-NLS-1$
 		},
 		_setReadOnly: function (readOnly) {
 			this._readonly = readOnly;
-			this._clientDiv.setAttribute("aria-readonly", readOnly ? "true" : "false"); //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-3$
 		},
 		_setSingleMode: function (singleMode, init) {
 			this._singleMode = singleMode;
@@ -25426,604 +26264,6 @@ define("orion/editor/textView", [  //$NON-NLS-1$
 
 /*******************************************************************************
  * @license
- * Copyright (c) 2010, 2012 IBM Corporation and others.
- * All rights reserved. This program and the accompanying materials are made 
- * available under the terms of the Eclipse Public License v1.0 
- * (http://www.eclipse.org/legal/epl-v10.html), and the Eclipse Distribution 
- * License v1.0 (http://www.eclipse.org/org/documents/edl-v10.html). 
- * 
- * Contributors: 
- *		Felipe Heidrich (IBM Corporation) - initial API and implementation
- *		Silenio Quarti (IBM Corporation) - initial API and implementation
- ******************************************************************************/
-
-/*eslint-env browser, amd*/
-define("orion/editor/projectionTextModel", ['orion/editor/textModel', 'orion/editor/eventTarget'], function(mTextModel, mEventTarget) { //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-0$
-
-	/**
-	 * @class This object represents a projection range. A projection specifies a
-	 * range of text and the replacement text. The range of text is relative to the
-	 * base text model associated to a projection model.
-	 * <p>
-	 * <b>See:</b><br/>
-	 * {@link orion.editor.ProjectionTextModel}<br/>
-	 * {@link orion.editor.ProjectionTextModel#addProjection}<br/>
-	 * </p>		 
-	 * @name orion.editor.Projection
-	 * 
-	 * @property {Number} start The start offset of the projection range. 
-	 * @property {Number} end The end offset of the projection range. This offset is exclusive.
-	 * @property {String|orion.editor.TextModel} [text=""] The projection text to be inserted
-	 */
-	/**
-	 * Constructs a new <code>ProjectionTextModel</code> based on the specified <code>TextModel</code>.
-	 *
-	 * @param {orion.editor.TextModel} baseModel The base text model.
-	 *
-	 * @name orion.editor.ProjectionTextModel
-	 * @class The <code>ProjectionTextModel</code> represents a projection of its base text
-	 * model. Projection ranges can be added to the projection text model to hide and/or insert
-	 * ranges to the base text model.
-	 * <p>
-	 * The contents of the projection text model is modified when changes occur in the base model,
-	 * projection model or by calls to {@link #addProjection} and {@link #removeProjection}.
-	 * </p>
-	 * <p>
-	 * <b>See:</b><br/>
-	 * {@link orion.editor.TextView}<br/>
-	 * {@link orion.editor.TextModel}
-	 * {@link orion.editor.TextView#setModel}
-	 * </p>
-	 * @borrows orion.editor.EventTarget#addEventListener as #addEventListener
-	 * @borrows orion.editor.EventTarget#removeEventListener as #removeEventListener
-	 * @borrows orion.editor.EventTarget#dispatchEvent as #dispatchEvent
-	 */
-	function ProjectionTextModel(baseModel) {
-		this._model = baseModel;
-		this._projections = [];
-		var self = this;
-		this._listener = {
-			onChanged: function(e) {
-				self._onChanged(e);
-			},
-			onChanging: function(e) {
-				self._onChanging(e);
-			}
-		};
-		baseModel.addEventListener("postChanged", this._listener.onChanged); //$NON-NLS-0$
-		baseModel.addEventListener("preChanging", this._listener.onChanging); //$NON-NLS-0$
-	}
-
-	ProjectionTextModel.prototype = /** @lends orion.editor.ProjectionTextModel.prototype */ {
-		/**
-		 * Destroys this projection text model.
-		 */
-		destroy: function() {
-			if (this._model) {
-				this._model.removeEventListener("postChanged", this._listener.onChanged); //$NON-NLS-0$
-				this._model.removeEventListener("preChanging", this._listener.onChanging); //$NON-NLS-0$
-				this._model = null;
-			}
-		},
-		/**
-		 * Adds a projection range to the model.
-		 * <p>
-		 * The model must notify the listeners before and after the the text is
-		 * changed by calling {@link #onChanging} and {@link #onChanged} respectively. 
-		 * </p>
-		 * @param {orion.editor.Projection} projection The projection range to be added.
-		 * 
-		 * @see orion.editor.ProjectionTextModel#removeProjection
-		 */
-		addProjection: function(projection) {
-			if (!projection) {return;}
-			//start and end can't overlap any exist projection
-			var model = this._model, projections = this._projections;
-			projection._lineIndex = model.getLineAtOffset(projection.start);
-			projection._lineCount = model.getLineAtOffset(projection.end) - projection._lineIndex;
-			var text = projection.text;
-			if (!text) { text = ""; }
-			if (typeof text === "string") { //$NON-NLS-0$
-				projection._model = new mTextModel.TextModel(text, model.getLineDelimiter());
-			} else {
-				projection._model = text;
-			}
-			var eventStart = this.mapOffset(projection.start, true);
-			var removedCharCount = projection.end - projection.start;
-			var removedLineCount = projection._lineCount;
-			var addedCharCount = projection._model.getCharCount();
-			var addedLineCount = projection._model.getLineCount() - 1;
-			var modelChangingEvent = {
-				type: "Changing", //$NON-NLS-0$
-				text: projection._model.getText(),
-				start: eventStart,
-				removedCharCount: removedCharCount,
-				addedCharCount: addedCharCount,
-				removedLineCount: removedLineCount,
-				addedLineCount: addedLineCount
-			};
-			this.onChanging(modelChangingEvent);
-			var index = this._binarySearch(projections, projection.start);
-			projections.splice(index, 0, projection);
-			var modelChangedEvent = {
-				type: "Changed", //$NON-NLS-0$
-				start: eventStart,
-				removedCharCount: removedCharCount,
-				addedCharCount: addedCharCount,
-				removedLineCount: removedLineCount,
-				addedLineCount: addedLineCount
-			};
-			this.onChanged(modelChangedEvent);
-		},
-		/**
-		 * Returns all projection ranges of this model.
-		 * 
-		 * @return {orion.editor.Projection[]} The projection ranges.
-		 * 
-		 * @see orion.editor.ProjectionTextModel#addProjection
-		 */
-		getProjections: function() {
-			return this._projections.slice(0);
-		},
-		/**
-		 * Gets the base text model.
-		 *
-		 * @return {orion.editor.TextModel} The base text model.
-		 */
-		getBaseModel: function() {
-			return this._model;
-		},
-		/**
-		 * Maps offsets between the projection model and its base model.
-		 *
-		 * @param {Number} offset The offset to be mapped.
-		 * @param {Boolean} [baseOffset=false] <code>true</code> if <code>offset</code> is in base model and
-		 *	should be mapped to the projection model.
-		 * @return {Number} The mapped offset
-		 */
-		mapOffset: function(offset, baseOffset) {
-			var projections = this._projections, delta = 0, i, projection;
-			if (baseOffset) {
-				for (i = 0; i < projections.length; i++) {
-					projection = projections[i];
-					if (projection.start > offset) { break; }
-					if (projection.end > offset) { return -1; }
-					delta += projection._model.getCharCount() - (projection.end - projection.start);
-				}
-				return offset + delta;
-			}
-			for (i = 0; i < projections.length; i++) {
-				projection = projections[i];
-				if (projection.start > offset - delta) { break; }
-				var charCount = projection._model.getCharCount();
-				if (projection.start + charCount > offset - delta) {
-					return -1;
-				}
-				delta += charCount - (projection.end - projection.start);
-			}
-			return offset - delta;
-		},
-		/**
-		 * Removes a projection range from the model.
-		 * <p>
-		 * The model must notify the listeners before and after the the text is
-		 * changed by calling {@link #onChanging} and {@link #onChanged} respectively. 
-		 * </p>
-		 * 
-		 * @param {orion.editor.Projection} projection The projection range to be removed.
-		 * 
-		 * @see orion.editor.ProjectionTextModel#addProjection
-		 */
-		removeProjection: function(projection) {
-			this._removeProjection(projection);
-		},
-		_removeProjection: function(projection, noEvents) {
-			var i, delta = 0;
-			for (i = 0; i < this._projections.length; i++) {
-				var p = this._projections[i];
-				if (p === projection) {
-					projection = p;
-					break;
-				}
-				delta += p._model.getCharCount() - (p.end - p.start);
-			}
-			if (i < this._projections.length) {
-				var model = this._model;
-				var eventStart = projection.start + delta;
-				var addedCharCount = projection.end - projection.start;
-				var addedLineCount = projection._lineCount;
-				var removedCharCount = projection._model.getCharCount();
-				var removedLineCount = projection._model.getLineCount() - 1;
-				if (!noEvents) {
-					var modelChangingEvent = {
-						type: "Changing", //$NON-NLS-0$
-						text: model.getText(projection.start, projection.end),
-						start: eventStart,
-						removedCharCount: removedCharCount,
-						addedCharCount: addedCharCount,
-						removedLineCount: removedLineCount,
-						addedLineCount: addedLineCount
-					};
-					this.onChanging(modelChangingEvent);
-				}
-				this._projections.splice(i, 1);
-				if (!noEvents) {
-					var modelChangedEvent = {
-						type: "Changed", //$NON-NLS-0$
-						start: eventStart,
-						removedCharCount: removedCharCount,
-						addedCharCount: addedCharCount,
-						removedLineCount: removedLineCount,
-						addedLineCount: addedLineCount
-					};
-					this.onChanged(modelChangedEvent);
-				}
-			}
-		},
-		/** @ignore */
-		_binarySearch: function (array, offset) {
-			var high = array.length, low = -1, index;
-			while (high - low > 1) {
-				index = Math.floor((high + low) / 2);
-				if (offset <= array[index].start) {
-					high = index;
-				} else {
-					low = index;
-				}
-			}
-			return high;
-		},
-		/**
-		 * @see orion.editor.TextModel#getCharCount
-		 */
-		getCharCount: function() {
-			var count = this._model.getCharCount(), projections = this._projections;
-			for (var i = 0; i < projections.length; i++) {
-				var projection = projections[i];
-				count += projection._model.getCharCount() - (projection.end - projection.start);
-			}
-			return count;
-		},
-		/**
-		 * @see orion.editor.TextModel#getLine
-		 */
-		getLine: function(lineIndex, includeDelimiter) {
-			if (lineIndex < 0) { return null; }
-			var model = this._model, projections = this._projections;
-			var delta = 0, result = [], offset = 0, i, lineCount, projection;
-			for (i = 0; i < projections.length; i++) {
-				projection = projections[i];
-				if (projection._lineIndex >= lineIndex - delta) { break; }
-				lineCount = projection._model.getLineCount() - 1;
-				if (projection._lineIndex + lineCount >= lineIndex - delta) {
-					var projectionLineIndex = lineIndex - (projection._lineIndex + delta);
-					if (projectionLineIndex < lineCount) {
-						return projection._model.getLine(projectionLineIndex, includeDelimiter);
-					} else {
-						result.push(projection._model.getLine(lineCount));
-					}
-				}
-				offset = projection.end;
-				delta += lineCount - projection._lineCount;
-			}
-			offset = Math.max(offset, model.getLineStart(lineIndex - delta));
-			for (; i < projections.length; i++) {
-				projection = projections[i];
-				if (projection._lineIndex > lineIndex - delta) { break; }
-				result.push(model.getText(offset, projection.start));
-				lineCount = projection._model.getLineCount() - 1;
-				if (projection._lineIndex + lineCount > lineIndex - delta) {
-					result.push(projection._model.getLine(0, includeDelimiter));
-					return result.join("");
-				}
-				result.push(projection._model.getText());
-				offset = projection.end;
-				delta += lineCount - projection._lineCount;
-			}
-			var end = model.getLineEnd(lineIndex - delta, includeDelimiter);
-			if (offset < end) {
-				result.push(model.getText(offset, end));
-			}
-			return result.join("");
-		},
-		/**
-		 * @see orion.editor.TextModel#getLineAtOffset
-		 */
-		getLineAtOffset: function(offset) {
-			var model = this._model, projections = this._projections;
-			var delta = 0, lineDelta = 0;
-			for (var i = 0; i < projections.length; i++) {
-				var projection = projections[i];
-				if (projection.start > offset - delta) { break; }
-				var charCount = projection._model.getCharCount();
-				if (projection.start + charCount > offset - delta) {
-					var projectionOffset = offset - (projection.start + delta);
-					lineDelta += projection._model.getLineAtOffset(projectionOffset);
-					delta += projectionOffset;
-					break;
-				}
-				lineDelta += projection._model.getLineCount() - 1 - projection._lineCount;
-				delta += charCount - (projection.end - projection.start);
-			}
-			return model.getLineAtOffset(offset - delta) + lineDelta;
-		},
-		/**
-		 * @see orion.editor.TextModel#getLineCount
-		 */
-		getLineCount: function() {
-			var model = this._model, projections = this._projections;
-			var count = model.getLineCount();
-			for (var i = 0; i < projections.length; i++) {
-				var projection = projections[i];
-				count += projection._model.getLineCount() - 1 - projection._lineCount;
-			}
-			return count;
-		},
-		/**
-		 * @see orion.editor.TextModel#getLineDelimiter
-		 */
-		getLineDelimiter: function() {
-			return this._model.getLineDelimiter();
-		},
-		/**
-		 * @see orion.editor.TextModel#getLineEnd
-		 */
-		getLineEnd: function(lineIndex, includeDelimiter) {
-			if (lineIndex < 0) { return -1; }
-			var model = this._model, projections = this._projections;
-			var delta = 0, offsetDelta = 0;
-			for (var i = 0; i < projections.length; i++) {
-				var projection = projections[i];
-				if (projection._lineIndex > lineIndex - delta) { break; }
-				var lineCount = projection._model.getLineCount() - 1;
-				if (projection._lineIndex + lineCount > lineIndex - delta) {
-					var projectionLineIndex = lineIndex - (projection._lineIndex + delta);
-					return projection._model.getLineEnd (projectionLineIndex, includeDelimiter) + projection.start + offsetDelta;
-				}
-				offsetDelta += projection._model.getCharCount() - (projection.end - projection.start);
-				delta += lineCount - projection._lineCount;
-			}
-			return model.getLineEnd(lineIndex - delta, includeDelimiter) + offsetDelta;
-		},
-		/**
-		 * @see orion.editor.TextModel#getLineStart
-		 */
-		getLineStart: function(lineIndex) {
-			if (lineIndex < 0) { return -1; }
-			var model = this._model, projections = this._projections;
-			var delta = 0, offsetDelta = 0;
-			for (var i = 0; i < projections.length; i++) {
-				var projection = projections[i];
-				if (projection._lineIndex >= lineIndex - delta) { break; }
-				var lineCount = projection._model.getLineCount() - 1;
-				if (projection._lineIndex + lineCount >= lineIndex - delta) {
-					var projectionLineIndex = lineIndex - (projection._lineIndex + delta);
-					return projection._model.getLineStart (projectionLineIndex) + projection.start + offsetDelta;
-				}
-				offsetDelta += projection._model.getCharCount() - (projection.end - projection.start);
-				delta += lineCount - projection._lineCount;
-			}
-			return model.getLineStart(lineIndex - delta) + offsetDelta;
-		},
-		/**
-		 * @see orion.editor.TextModel#getText
-		 */
-		getText: function(start, end) {
-			if (start === undefined) { start = 0; }
-			var model = this._model, projections = this._projections;
-			var delta = 0, result = [], i, projection, charCount;
-			for (i = 0; i < projections.length; i++) {
-				projection = projections[i];
-				if (projection.start > start - delta) { break; }
-				charCount = projection._model.getCharCount();
-				if (projection.start + charCount > start - delta) {
-					if (end !== undefined && projection.start + charCount > end - delta) {
-						return projection._model.getText(start - (projection.start + delta), end - (projection.start + delta));
-					} else {
-						result.push(projection._model.getText(start - (projection.start + delta)));
-						start = projection.end + delta + charCount - (projection.end - projection.start);
-					}
-				}
-				delta += charCount - (projection.end - projection.start);
-			}
-			var offset = start - delta;
-			if (end !== undefined) {
-				for (; i < projections.length; i++) {
-					projection = projections[i];
-					if (projection.start > end - delta) { break; }
-					result.push(model.getText(offset, projection.start));
-					charCount = projection._model.getCharCount();
-					if (projection.start + charCount > end - delta) {
-						result.push(projection._model.getText(0, end - (projection.start + delta)));
-						return result.join("");
-					}
-					result.push(projection._model.getText());
-					offset = projection.end;
-					delta += charCount - (projection.end - projection.start);
-				}
-				result.push(model.getText(offset, end - delta));
-			} else {
-				for (; i < projections.length; i++) {
-					projection = projections[i];
-					result.push(model.getText(offset, projection.start));
-					result.push(projection._model.getText());
-					offset = projection.end;
-				}
-				result.push(model.getText(offset));
-			}
-			return result.join("");
-		},
-		/** @ignore */
-		_onChanged: function(modelChangedEvent) {
-			var change = this._change;
-			var start = change.baseStart, end = change.baseEnd, i;
-			var projection, projections = this._projections;
-			for (i = 0; i < projections.length; i++) {
-				projection = projections[i];
-				if (projection.end > start) { break; }
-			}
-			var rangeStart = i;
-			for (i = 0; i < projections.length; i++) {
-				projection = projections[i];
-				if (projection.start >= end) { break; }
-			}
-			var rangeEnd = i;
-			var model = this._model;
-			var changeCount = change.baseText.length - (end - start);
-			for (i = rangeEnd; i < projections.length; i++) {
-				projection = projections[i];
-				projection.start += changeCount;
-				projection.end += changeCount;
-				projection._lineIndex = model.getLineAtOffset(projection.start);
-			}
-			var removed = projections.splice(rangeStart, rangeEnd - rangeStart);
-			for (i = 0; i < removed.length; i++) {
-				if (removed[i].annotation) {
-					removed[i].annotation._expand();
-				}
-			}
-			var modelChangedEvent1 = {
-				type: "Changed", //$NON-NLS-0$
-				start: change.start,
-				removedCharCount: change.removedCharCount,
-				addedCharCount: change.addedCharCount,
-				removedLineCount: change.removedLineCount,
-				addedLineCount: change.addedLineCount
-			};
-			this.onChanged(modelChangedEvent1);
-			this._change = undefined;
-		},
-		_onChanging: function(modelChangingEvent) {
-			var hasChange = !!this._change;
-			var change = this._change || {};
-			var start = modelChangingEvent.start, end = start + modelChangingEvent.removedCharCount;
-			change.baseStart = start;
-			change.baseEnd = end;
-			change.baseText = modelChangingEvent.text;
-			change.addedLineCount = modelChangingEvent.addedLineCount;
-			if (!hasChange) {
-				this._change = change;
-				change.text = modelChangingEvent.text;
-				var projections = this._projections, delta, i, projection;
-				function mapOffset(offset) {
-					for (i = 0, delta = 0; i < projections.length; i++) {
-						projection = projections[i];
-						if (projection.start > offset) { break; }
-						if (projection.end > offset) { return -1; }
-						delta += projection._model.getCharCount() - (projection.end - projection.start);
-					}
-					return offset + delta;
-				}
-				change.start = mapOffset(start);
-				if (change.start === -1) {
-					change.text = this._model.getText(projection.start, start) + change.text;
-					change.addedLineCount += this._model.getLineAtOffset(start) - this._model.getLineAtOffset(projection.start);
-					change.start = projection.start + delta;
-				}
-				change.end = mapOffset(end);
-				if (change.end === -1) {
-					change.text += this._model.getText(end, projection.end);
-					change.addedLineCount += this._model.getLineAtOffset(projection.end) - this._model.getLineAtOffset(end);
-					change.end = projection.start + delta;
-				}
-			}
-			change.addedCharCount = change.text.length;
-			change.removedCharCount = change.end - change.start;
-			change.removedLineCount = this.getLineAtOffset(change.end) - this.getLineAtOffset(change.start);
-			var modelChangingEvent1 = {
-				type: "Changing", //$NON-NLS-0$
-				text: change.text,
-				start: change.start,
-				removedCharCount: change.removedCharCount,
-				addedCharCount: change.addedCharCount,
-				removedLineCount: change.removedLineCount,
-				addedLineCount: change.addedLineCount
-			};
-			this.onChanging(modelChangingEvent1);
-		},
-		/**
-		 * @see orion.editor.TextModel#onChanging
-		 */
-		onChanging: function(modelChangingEvent) {
-			return this.dispatchEvent(modelChangingEvent);
-		},
-		/**
-		 * @see orion.editor.TextModel#onChanged
-		 */
-		onChanged: function(modelChangedEvent) {
-			return this.dispatchEvent(modelChangedEvent);
-		},
-		/**
-		 * @see orion.editor.TextModel#setLineDelimiter
-		 */
-		setLineDelimiter: function(lineDelimiter) {
-			this._model.setLineDelimiter(lineDelimiter);
-		},
-		/**
-		 * @see orion.editor.TextModel#setText
-		 */
-		setText: function(text, start, end) {
-			this._change = {
-				text: text || "",
-				start: start || 0,
-				end: end === undefined ? this.getCharCount() : end
-			};
-			var projections = this._projections, delta, i, projection;
-			function mapOffset(offset) {
-				for (i = 0, delta = 0; i < projections.length; i++) {
-					projection = projections[i];
-					if (projection.start > offset - delta) { break; }
-					var charCount = projection._model.getCharCount();
-					if (projection.start + charCount > offset - delta) {
-						return -1;
-					}
-					delta += charCount - (projection.end - projection.start);
-				}
-				return offset - delta;
-			}
-			var startProjection, endProjection;
-			var mapStart = mapOffset(this._change.start);
-			if (mapStart === -1) {
-				startProjection = {
-					projection: projection,
-					start: this._change.start - (projection.start + delta)
-				};
-				mapStart = projection.end;
-			}
-			var mapEnd = mapOffset(this._change.end);
-			if (mapEnd === -1) {
-				endProjection = {
-					projection: projection,
-					end: this._change.end - (projection.start + delta)
-				};
-				mapEnd = projection.start;
-			}
-			if (startProjection && endProjection && startProjection.projection === endProjection.projection) {
-				//TODO events - special case - change is completely inside of a projection
-				projection._model.setText(this._change.text, startProjection.start, endProjection.end);
-			} else {
-				this._model.setText(this._change.text, mapStart, mapEnd);
-				if (startProjection) {
-					projection = startProjection.projection;
-					projection._model.setText("", startProjection.start);
-				}		
-				if (endProjection) {
-					projection = endProjection.projection;
-					projection._model.setText("", 0, endProjection.end);
-					projection.start = projection.end;
-					projection._lineCount = 0;
-				}
-			}
-			this._change = undefined;
-		}
-	};
-	mEventTarget.EventTarget.addMixin(ProjectionTextModel.prototype);
-
-	return {ProjectionTextModel: ProjectionTextModel};
-});
-
-/*******************************************************************************
- * @license
  * Copyright (c) 2010, 2015 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials are made 
  * available under the terms of the Eclipse Public License v1.0 
@@ -26700,20 +26940,35 @@ function Tooltip (view, editor) {
 			var curLine = tv.getLineAtOffset(start);
 			var endLine = tv.getLineAtOffset(end);
 			
-			// Adjust start / end to be on the current line if necessary
+			var height, viewRect;
+			
 			if (curLine !== endLine) {
-				// 'getLineEnd' isn't API in textView but is in textModel...
-				end = tv.getModel().getLineEnd(curLine);
+				var y = tv.getLocationAtOffset(start).y;
+				height = 0;
+				var maxX = 0;
+				while (curLine <= endLine){
+					height += tv.getLineHeight(curLine);
+					var lineEnd = tv.getModel().getLineEnd(curLine);
+					var possibleEnd = tv.getLocationAtOffset(lineEnd).x;
+					if (possibleEnd > end){
+						maxX = possibleEnd;
+					}
+					curLine++;
+				}
+				var lineStart = tv.getModel().getLineStart(endLine);
+				var x = tv.getLocationAtOffset(lineStart).x;
+				
+				viewRect = { x: x, y: y, width: maxX - x, height: height};
+				
+			} else {
+				var startPos = tv.getLocationAtOffset(start);
+				var endPos = tv.getLocationAtOffset(end);
+				height = tv.getLineHeight(curLine);
+				viewRect = { x: startPos.x, y: startPos.y, 
+							width: endPos.x - startPos.x, height: height};
 			}
-			
-			var height = tv.getLineHeight(curLine);
-			var startPos = tv.getLocationAtOffset(start);
-			var endPos = tv.getLocationAtOffset(end);
-			
-			var viewRect = { x: startPos.x, y: startPos.y, 
-								width: endPos.x - startPos.x, height: height};
 								
-			viewRect = this._view.convert(viewRect, "document", "page"); //$NON-NLS-0$ //$NON-NLS-1$
+			viewRect = this._view.convert(viewRect, "document", "page"); //$NON-NLS-1$ //$NON-NLS-2$
 			return {left: viewRect.x, top: viewRect.y, width: viewRect.width, height: viewRect.height};
 		},
 		/*
@@ -27312,6 +27567,15 @@ define("orion/editor/editor", [ //$NON-NLS-0$
 			return this._annotationRuler;
 		},
 		/**
+		 * Returns the whether annotation ruler of the editor is showning.
+		 *
+		 * @returns {Boolean}
+		 * @since 12
+		 */
+		getAnnotationRulerVisible: function() {
+			return this._annotationRulerVisible;
+		},
+		/**
 		 * Returns the annotation styler of the editor.
 		 *
 		 * @returns {orion.editor.AnnotationStyler}
@@ -27336,12 +27600,30 @@ define("orion/editor/editor", [ //$NON-NLS-0$
 			return this._foldingRuler;
 		},
 		/**
+		 * Returns the whether folding ruler of the editor is showning.
+		 *
+		 * @returns {Boolean}
+		 * @since 12
+		 */
+		getFoldingRulerVisible: function() {
+			return this._foldingRulerVisible;
+		},
+		/**
 		 * Returns the line number ruler of the editor.
 		 *
 		 * @returns {orion.editor.LineNumberRuler}
 		 */
 		getLineNumberRuler: function() {
 			return this._lineNumberRuler;
+		},
+		/**
+		 * Returns the whether lines ruler of the editor is showning.
+		 *
+		 * @returns {Boolean}
+		 * @since 12
+		 */
+		getLineNumberRulerVisible: function() {
+			return this._lineNumberRulerVisible;
 		},
 		/**
 		 * Returns the Tooltip instance for this editor
@@ -27358,6 +27640,15 @@ define("orion/editor/editor", [ //$NON-NLS-0$
 		 */
 		getZoomRuler: function() {
 			return this._zoomRuler;
+		},
+		/**
+		 * Returns the whether zoom ruler of the editor is showning.
+		 *
+		 * @returns {Boolean}
+		 * @since 12
+		 */
+		getZoomRulerVisible: function() {
+			return this._zoomRulerVisible;
 		},
 		/**
 		 * Returns the base text model of this editor.
@@ -27460,6 +27751,12 @@ define("orion/editor/editor", [ //$NON-NLS-0$
 		 */
 		setFoldingRulerVisible: function(visible, force) {
 			if (this._foldingRulerVisible === visible && !force) { return; }
+			if (!visible) {
+				var textActions = this.getTextActions();
+				if (textActions) {
+					textActions.expandAnnotations(true);
+				}
+			}
 			this._foldingRulerVisible = visible;
 			if (!this._foldingRuler) { return; }
 			var textView = this._textView;
@@ -28349,8 +28646,9 @@ define("orion/editor/find", [ //$NON-NLS-0$
 	'orion/editor/annotations', //$NON-NLS-0$
 	'orion/regex', //$NON-NLS-0$
 	'orion/objects', //$NON-NLS-0$
+	'orion/Deferred', //$NON-NLS-0$
 	'orion/util' //$NON-NLS-0$
-], function(messages, mKeyBinding, mKeyModes, mAnnotations, mRegex, objects, util) {
+], function(messages, mKeyBinding, mKeyModes, mAnnotations, mRegex, objects, Deferred, util) {
 
 	var exports = {};
 	
@@ -28437,23 +28735,26 @@ define("orion/editor/find", [ //$NON-NLS-0$
 					start = model.getCharCount() - 1;
 				}
 			}
-			var result = editor.getModel().find({
+			Deferred.when(editor.getModel().find({
 				string: prefix,
 				start: start,
 				reverse: !forward,
-				caseInsensitive: prefix.toLowerCase() === prefix}).next();
-			if (result) {
-				if (!incremental) {
-					this._start = start;
-				}
-				this._success = true;
-				this._ignoreSelection = true;
-				editor.moveSelection(forward ? result.start : result.end, forward ? result.end : result.start);
-				this._ignoreSelection = false;
-			} else {
-				this._success = false;
-			}
-			this._status();
+				caseInsensitive: prefix.toLowerCase() === prefix}), 
+				function(iterator) {
+					var findResult = iterator.next();
+					if (findResult) {
+						if (!incremental) {
+							this._start = start;
+						}
+						this._success = true;
+						this._ignoreSelection = true;
+						editor.moveSelection(forward ? findResult.start : findResult.end, forward ? findResult.end : findResult.start);
+						this._ignoreSelection = false;
+					} else {
+						this._success = false;
+					}
+					this._status();
+			}.bind(this));
 			return true;
 		},
 		isActive: function() {
@@ -28555,17 +28856,18 @@ define("orion/editor/find", [ //$NON-NLS-0$
 			var savedOptions = this.getOptions();
 			this.setOptions(tempOptions);
 			var startOffset = incremental ? this._startOffset : this.getStartOffset();
-			var result = this._doFind(string, startOffset, count);
-			if (result) {
-				if (!incremental) {
-					this._startOffset = result.start;
+			return this._doFind(string, startOffset, count).then(function(result) {
+				if (result) {
+					if (!incremental) {
+						this._startOffset = result.start;
+					}
 				}
-			}
-			this.setOptions(savedOptions);
-			if (this._hideAfterFind) {
-				this.hide();
-			}
-			return result;
+				this.setOptions(savedOptions);
+				if (this._hideAfterFind) {
+					this.hide();
+				}
+				return result;
+			}.bind(this));
 		},
 		getStartOffset: function() {
 			if (this._start !== undefined) {
@@ -28658,7 +28960,7 @@ define("orion/editor/find", [ //$NON-NLS-0$
 				var replaceString = this._processReplaceString(this.getReplaceString());
 				var selection = editor.getSelection();
 				var start = selection.start;
-				var result = editor.getModel().find({
+				Deferred.when(this._editor.getModel().find({
 					string: string,
 					start: start,
 					reverse: false,
@@ -28666,15 +28968,20 @@ define("orion/editor/find", [ //$NON-NLS-0$
 					regex: this._regex,
 					wholeWord: this._wholeWord,
 					caseInsensitive: this._caseInsensitive
-				}).next();
-				if (result) {
-					this.startUndo();
-					this._doReplace(result.start, result.end, string, replaceString);
-					this.endUndo();
-				}
-			}
-			if (this._findAfterReplace && string){
-				this._doFind(string, this.getStartOffset());
+				})).then( function(iterator) {
+					if(!iterator) {
+						return;
+					}
+					var result = iterator.next();
+					if (result) {
+						this.startUndo();
+						this._doReplace(result.start, result.end, string, replaceString);
+						this.endUndo();
+					}
+					if (this._findAfterReplace){
+						this._doFind(string, this.getStartOffset());
+					}
+				}.bind(this));
 			}
 		},
 		replaceAll : function() {
@@ -28692,7 +28999,7 @@ define("orion/editor/find", [ //$NON-NLS-0$
 					while (true) {
 						//For replace all, we need to ignore the wrap search from the user option
 						//Otherwise the loop will be dead, see https://bugs.eclipse.org/bugs/show_bug.cgi?id=411813
-						var result = self._doFind(string, startPos, null, true);
+						var result = self._doFindForReplaceAll(string, startPos, null, true);
 						if (!result) {
 							break;
 						}
@@ -28751,8 +29058,14 @@ define("orion/editor/find", [ //$NON-NLS-0$
 				if (options.wholeWord === true || options.wholeWord === false) {
 					this._wholeWord = options.wholeWord;
 				}
-				if (options.incremental === true || options.incremental === false) {
-					this._incremental = options.incremental;
+				//Allow extended TextModelFactory to disable incremental find
+				if (options.incremental === true || options.incremental === false || options.incremental === "disabled") {
+					if(options.incremental === "disabled") {
+						this._incremental = false;
+						this._incrementalDisabled = true;
+					} else {
+						this._incremental = options.incremental;
+					}
 				}
 				if (options.regex === true || options.regex === false) {
 					this._regex = options.regex;
@@ -28805,19 +29118,35 @@ define("orion/editor/find", [ //$NON-NLS-0$
 				this._undoStack.endCompoundChange();
 			}
 		},
-		_find: function(string, startOffset, noWrap) {
+		_findFromModel: function(string, startOffset, noWrap) {
 			return this._editor.getModel().find({
 				string: string,
 				start: startOffset,
 				end: this._end,
 				reverse: this._reverse,
-				wrap: (noWrap ? false: this._wrap),
+				wrap: noWrap ? false: this._wrap,
 				regex: this._regex,
 				wholeWord: this._wholeWord,
 				caseInsensitive: this._caseInsensitive
 			});
 		},
-		_doFind: function(string, startOffset, count, noWrap) {
+		
+		_find: function(editor, string, startOffset, noWrap) {
+			var iterator;
+			if (this._regex) {
+				try {
+					iterator = this._findFromModel(string, startOffset, noWrap);
+				} catch (ex) {
+					editor.reportStatus(ex.message, "error"); //$NON-NLS-0$
+					return null;
+				}
+			} else {
+				iterator = this._findFromModel(string, startOffset, noWrap);
+			}
+			return iterator;
+		},
+		
+		_doFindForReplaceAll: function(string, startOffset, count, noWrap) {
 			count = count || 1;
 			var editor = this._editor;
 			if (!string) {
@@ -28826,53 +29155,70 @@ define("orion/editor/find", [ //$NON-NLS-0$
 			}
 			this._lastString = string;
 			var result, iterator;
-			if (this._regex) {
-				try {
-					iterator = this._find(string, startOffset, noWrap);
-				} catch (ex) {
-					editor.reportStatus(ex.message, "error"); //$NON-NLS-0$
-					return;
-				}
-			} else {
-				iterator = this._find(string, startOffset, noWrap);
+			iterator = this._find(editor, string, startOffset, noWrap);
+			if(!iterator) {
+				return null;
+			}
+			if(!iterator.hasNext || !iterator.next) {
+				return null;
 			}
 			for (var i=0; i<count && iterator.hasNext(); i++) {
 				result = iterator.next();
 			}
-			if (!this._replacingAll) {
-				if (result) {
-					this._editor.reportStatus("");
-				} else {
-					this._editor.reportStatus(messages.notFound, "error"); //$NON-NLS-0$
-				}
-				if (this.isVisible()) {
-					var type = mAnnotations.AnnotationType.ANNOTATION_CURRENT_SEARCH;
-					var annotationModel = editor.getAnnotationModel();
-					if (annotationModel) {
-						annotationModel.removeAnnotations(type);
-						if (result) {
-							annotationModel.addAnnotation(mAnnotations.AnnotationType.createAnnotation(type, result.start, result.end));
-						}
-					}
-					if (this._showAll) {
-						if (this._timer) {
-							window.clearTimeout(this._timer);
-						}
-						var that = this;
-						this._timer = window.setTimeout(function(){
-							that._markAllOccurrences();
-							that._timer = null;
-						}, 500);
-					}
-				}
-				if (this._findCallback) {
-					this._findCallback(result);
-				}
-				else if (result) {
-					editor.moveSelection(result.start, result.end, null, false);
-				}
-			}
 			return result;
+		},
+		
+		_doFind: function(string, startOffset, count, noWrap) {
+			count = count || 1;
+			var editor = this._editor;
+			if (!string) {
+				this._removeAllAnnotations();
+				return new Deferred().resolve();
+			}
+			this._lastString = string;
+			var result;
+			return Deferred.when(this._find(editor, string, startOffset, noWrap)).then( function(iterator) {
+				if(!iterator) {
+					return;
+				}
+				for (var i=0; i<count && iterator.hasNext(); i++) {
+					result = iterator.next();
+				}
+				if (!this._replacingAll) {
+					if (result) {
+						this._editor.reportStatus("");
+					} else {
+						this._editor.reportStatus(messages.notFound, "error"); //$NON-NLS-0$
+					}
+					if (this.isVisible()) {
+						var type = mAnnotations.AnnotationType.ANNOTATION_CURRENT_SEARCH;
+						var annotationModel = editor.getAnnotationModel();
+						if (annotationModel) {
+							annotationModel.removeAnnotations(type);
+							if (result) {
+								annotationModel.addAnnotation(mAnnotations.AnnotationType.createAnnotation(type, result.start, result.end));
+							}
+						}
+						if (this._showAll) {
+							if (this._timer) {
+								window.clearTimeout(this._timer);
+							}
+							var that = this;
+							this._timer = window.setTimeout(function(){
+								that._markAllOccurrences();
+								that._timer = null;
+							}, 500);
+						}
+					}
+					if (this._findCallback) {
+						this._findCallback(result);
+					}
+					else if (result) {
+						editor.moveSelection(result.start, result.end, null, false);
+					}
+				}
+				return result;
+			}.bind(this));
 		},
 		_doReplace: function(start, end, searchStr, newStr) {
 			var editor = this._editor;
@@ -28898,19 +29244,25 @@ define("orion/editor/find", [ //$NON-NLS-0$
 			}
 			if (this.isVisible()) {
 				var string = this.getFindString();
-				iter = this._editor.getModel().find({
+				Deferred.when(this._editor.getModel().find({
 					string: string,
 					regex: this._regex,
 					wholeWord: this._wholeWord,
 					caseInsensitive: this._caseInsensitive
-				});
-				add = [];
-				while (iter.hasNext()) {
-					var range = iter.next();
-					add.push(mAnnotations.AnnotationType.createAnnotation(type, range.start, range.end));
-				}
+				})).then( function(iterator) {
+					if(!iterator) {
+						return;
+					}
+					add = [];
+					while (iterator.hasNext()) {
+						var range = iterator.next();
+						add.push(mAnnotations.AnnotationType.createAnnotation(type, range.start, range.end));
+					}
+					annotationModel.replaceAnnotations(remove, add);
+				}.bind(this));
+			} else {
+				annotationModel.replaceAnnotations(remove, add);
 			}
-			annotationModel.replaceAnnotations(remove, add);
 		},
 		_removeAllAnnotations: function() {
 			var annotationModel = this._editor.getAnnotationModel();
@@ -29414,6 +29766,7 @@ define("orion/editor/actions", [ //$NON-NLS-0$
 		},
 		expandAnnotation: function(expand) {
 			var editor = this.editor;
+			if (!editor.getFoldingRulerVisible()) return true;
 			var annotationModel = editor.getAnnotationModel();
 			if(!annotationModel) { return true; }
 			var model = editor.getModel();
@@ -29446,6 +29799,7 @@ define("orion/editor/actions", [ //$NON-NLS-0$
 		},
 		expandAnnotations: function(expand) {
 			var editor = this.editor;
+			if (!editor.getFoldingRulerVisible()) return true;
 			var textView = editor.getTextView();
 			var annotationModel = editor.getAnnotationModel();
 			if(!annotationModel) { return true; }
@@ -30678,7 +31032,7 @@ define("orion/editor/rulers", [
 		 */
 		setAnnotationModel: function (annotationModel) {
 			if (this._annotationModel) {
-				this._annotationModel.removEventListener("Changed", this._listener.onAnnotationModelChanged); //$NON-NLS-0$
+				this._annotationModel.removeEventListener("Changed", this._listener.onAnnotationModelChanged); //$NON-NLS-0$
 			}
 			this._annotationModel = annotationModel;
 			if (this._annotationModel) {
@@ -31870,7 +32224,7 @@ define("orion/editor/textDND", ['orion/util'], function(util) { //$NON-NLS-1$ //
 });
 /*******************************************************************************
  * @license
- * Copyright (c) 2013 IBM Corporation and others.
+ * Copyright (c) 2013, 2016 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials are made 
  * available under the terms of the Eclipse Public License v1.0 
  * (http://www.eclipse.org/legal/epl-v10.html), and the Eclipse Distribution 
@@ -31880,13 +32234,13 @@ define("orion/editor/textDND", ['orion/util'], function(util) { //$NON-NLS-1$ //
  *     IBM Corporation - initial API and implementation
  *******************************************************************************/
 /*eslint-env browser, amd*/
-define("orion/editor/linkedMode", [ //$NON-NLS-0$
-	'i18n!orion/editor/nls/messages', //$NON-NLS-0$
-	'orion/keyBinding', //$NON-NLS-0$
-	'orion/editor/keyModes', //$NON-NLS-0$
-	'orion/editor/annotations', //$NON-NLS-0$
-	'orion/objects', //$NON-NLS-0$
-	'orion/util' //$NON-NLS-0$
+define("orion/editor/linkedMode", [
+	'i18n!orion/editor/nls/messages',
+	'orion/keyBinding',
+	'orion/editor/keyModes',
+	'orion/editor/annotations',
+	'orion/objects',
+	'orion/util'
 ], function(messages, mKeyBinding, mKeyModes, mAnnotations, objects) {
 
 	var exports = {};
@@ -31904,6 +32258,13 @@ define("orion/editor/linkedMode", [ //$NON-NLS-0$
 	}
 	
 	LinkedContentAssist.prototype = {
+		/**
+		 * @description Removes the prefix from the given string
+		 * @function
+		 * @param {String} prefix
+		 * @param {String} string
+		 * @returns {String} The substring after removing the prefix
+		 */
 		chop: function(prefix, string) {
 			return string.substring(prefix.length);
 		},
@@ -31915,17 +32276,17 @@ define("orion/editor/linkedMode", [ //$NON-NLS-0$
 			var prefix = context.prefix;
 			var proposals = [];
 			var linkedstyle = this._data.style ? this._data.style : null;
-			linkedstyle = linkedstyle ? linkedstyle : 'emphasis';
+			linkedstyle = linkedstyle ? linkedstyle : 'emphasis'; //$NON-NLS-1$
 			var values = this._data.values;
 			for (var i = 0; i < values.length; i++) {
 				var val = values[i];
-				if(typeof(val) === 'string' && val.indexOf(prefix) === 0) {
+				if(typeof val === 'string' && val.indexOf(prefix) === 0) {
 					proposals.push({proposal: this.chop(prefix, val), 
 						description: val,
 						hover: val,
 						style: linkedstyle
 					});
-				} else if(typeof(val) === 'object' && val.proposal) {
+				} else if(typeof val === 'object' && val.proposal) {
 					proposals.push({proposal: this.chop(prefix, val.proposal), 
 						description: val.description ? val.description : val.proposal,
 						hover: val.hover ? val.hover : val.proposal,
@@ -31946,6 +32307,14 @@ define("orion/editor/linkedMode", [ //$NON-NLS-0$
 		}
 	};
 
+	/**
+	 * @name LinkedMode
+	 * @description Create a new LinkedMode
+	 * @param {Editor} editor The backing editor
+	 * @param {UndoStack} undoStack The undo stack
+	 * @param contentAssist
+	 * @returns returns
+	 */
 	function LinkedMode(editor, undoStack, contentAssist) {
 		var textView = editor.getTextView();
 		mKeyModes.KeyMode.call(this, textView);
@@ -31960,7 +32329,7 @@ define("orion/editor/linkedMode", [ //$NON-NLS-0$
 			return true;
 		}.bind(this));
 		textView.setAction("linkedModeCancel", function() { //$NON-NLS-0$
-			this.exitLinkedMode(false);
+			this.exitLinkedMode(true);
 			return true;
 		}.bind(this));
 		textView.setAction("linkedModeNextGroup", function() { //$NON-NLS-0$
@@ -31980,21 +32349,21 @@ define("orion/editor/linkedMode", [ //$NON-NLS-0$
 		 */
 		this.linkedModeListener = {
 		
-			onActivating: function(event) {
+			onActivating: /* @callback */ function(evnt) {
 				if (this._groupContentAssistProvider) {
 					this.contentAssist.setProviders([this._groupContentAssistProvider]);
 					this.contentAssist.setProgress(null);
 				}
 			}.bind(this),
 			
-			onModelChanged: function(event) {
+			onModelChanged: function(evnt) {
 				if (this.ignoreVerify) { return; }
 
 				// Get the position being modified
-				var start = this.editor.mapOffset(event.start);
+				var start = this.editor.mapOffset(evnt.start);
 				var model = this.linkedModeModel, positionChanged, changed;
 				while (model) {
-					positionChanged = this._getPositionChanged(model, start, start + event.removedCharCount);
+					positionChanged = this._getPositionChanged(model, start, start + evnt.removedCharCount);
 					changed = positionChanged.position;
 					if (changed === undefined || changed.model !== model) {
 						// The change has been done outside of the positions, exit the Linked Mode
@@ -32008,7 +32377,7 @@ define("orion/editor/linkedMode", [ //$NON-NLS-0$
 
 				// Update position offsets for this change. Group changes are done in #onVerify
 				var deltaCount = 0;
-				var changeCount = event.addedCharCount - event.removedCharCount;
+				var changeCount = evnt.addedCharCount - evnt.removedCharCount;
 				var sortedPositions = positionChanged.positions, position, pos;
 				for (var i = 0; i < sortedPositions.length; ++i) {
 					pos = sortedPositions[i];
@@ -32031,13 +32400,12 @@ define("orion/editor/linkedMode", [ //$NON-NLS-0$
 				this._updateAnnotations(sortedPositions);
 			}.bind(this),
 
-			onVerify: function(event) {
+			onVerify: function(evnt) {
 				if (this.ignoreVerify) { return; }
 
 				// Get the position being modified
-				var editor = this.editor;
-				var start = editor.mapOffset(event.start);
-				var end = this.editor.mapOffset(event.end);
+				var start = this.editor.mapOffset(evnt.start);
+				var end = this.editor.mapOffset(evnt.end);
 				var model = this.linkedModeModel, positionChanged, changed;
 				while (model) {
 					positionChanged = this._getPositionChanged(model, start, end);
@@ -32067,7 +32435,7 @@ define("orion/editor/linkedMode", [ //$NON-NLS-0$
 				
 				// Update position offsets taking into account all positions in the same changing group
 				var deltaCount = 0;
-				var changeCount = event.text.length - (end - start);
+				var changeCount = evnt.text.length - (end - start);
 				var sortedPositions = positionChanged.positions, position, pos;
 				var deltaStart = start - changed.position.offset, deltaEnd = end - changed.position.offset;
 				for (var i = 0; i < sortedPositions.length; ++i) {
@@ -32094,17 +32462,22 @@ define("orion/editor/linkedMode", [ //$NON-NLS-0$
 				for (i = sortedPositions.length - 1; i >= 0; i--) {
 					pos = sortedPositions[i];
 					if (pos.model === model && pos.group === changed.group) {
-						editor.setText(event.text, pos.oldOffset + deltaStart , pos.oldOffset + deltaEnd, false);
+						this.editor.setText(evnt.text, pos.oldOffset + deltaStart , pos.oldOffset + deltaEnd, false);
 					}
 				}
 				this.ignoreVerify = false;
-				event.text = null;
+				evnt.text = null;
 				this._updateAnnotations(sortedPositions);
 			}.bind(this)
 		};
 	}
 	LinkedMode.prototype = new mKeyModes.KeyMode();
 	objects.mixin(LinkedMode.prototype, {
+		/**
+		 * @description Create the keybindings
+		 * @function
+		 * @returns {Array.<Object>} The keybindings
+		 */
 		createKeyBindings: function() {
 			var KeyBinding = mKeyBinding.KeyBinding;
 			var bindings = [];
@@ -32152,10 +32525,10 @@ define("orion/editor/linkedMode", [ //$NON-NLS-0$
 			if (!this.linkedModeModel) {
 				var textView = this.editor.getTextView();
 				textView.addKeyMode(this);
-				textView.addEventListener("Verify", this.linkedModeListener.onVerify); //$NON-NLS-0$
-				textView.addEventListener("ModelChanged", this.linkedModeListener.onModelChanged); //$NON-NLS-0$
+				textView.addEventListener("Verify", this.linkedModeListener.onVerify);
+				textView.addEventListener("ModelChanged", this.linkedModeListener.onModelChanged);
 				var contentAssist = this.contentAssist;
-				contentAssist.addEventListener("Activating", this.linkedModeListener.onActivating); //$NON-NLS-0$
+				contentAssist.addEventListener("Activating", this.linkedModeListener.onActivating);
 				this.editor.reportStatus(messages.linkedModeEntered, null, true);
 			}
 			this._sortedPositions = null;
@@ -32190,42 +32563,65 @@ define("orion/editor/linkedMode", [ //$NON-NLS-0$
 				var editor = this.editor;
 				var textView = editor.getTextView();
 				textView.removeKeyMode(this);
-				textView.removeEventListener("Verify", this.linkedModeListener.onVerify); //$NON-NLS-0$
-				textView.removeEventListener("ModelChanged", this.linkedModeListener.onModelChanged); //$NON-NLS-0$
+				textView.removeEventListener("Verify", this.linkedModeListener.onVerify);
+				textView.removeEventListener("ModelChanged", this.linkedModeListener.onModelChanged);
 				var contentAssist = this.contentAssist;
-				contentAssist.removeEventListener("Activating", this.linkedModeListener.onActivating); //$NON-NLS-0$
+				contentAssist.removeEventListener("Activating", this.linkedModeListener.onActivating);
 				contentAssist.offset = undefined;
 				this.editor.reportStatus(messages.linkedModeExited, null, true);
-				if (escapePosition && typeof model.escapePosition === "number") { //$NON-NLS-0$
-					editor.setCaretOffset(model.escapePosition, false);
-				}
+			}
+			if (escapePosition && typeof model.escapePosition === "number") {
+				editor.setCaretOffset(model.escapePosition, false);
 			}
 			this.selectLinkedGroup(0);
 		},
+		/**
+		 * @description Start undoing
+		 */
 		startUndo: function() {
 			if (this.undoStack) {
-				var self = this;
+				var slf = this;
 				var model = this.linkedModeModel;
 				this._compoundChange = this.undoStack.startCompoundChange({
 					model: model,
 					group: model.selectedGroupIndex,
+					/**
+					 * @callback 
+					 */
 					end: function() {
-						self._compoundChange = null;
+						slf._compoundChange = null;
 					}
 				});
 			}
 		}, 
+		/**
+		 * @description Ends the undo
+		 */
 		endUndo: function() {
 			if (this.undoStack) {
 				this.undoStack.endCompoundChange();
 			}
 		},
+		/**
+		 * @description Returns if linked mode is active in the current editor
+		 * @function
+		 * @returns {Boolean} If linked mode is active
+		 */
 		isActive: function() {
 			return !!this.linkedModeModel;
 		},
+		/**
+		 * @description Returns if linked mode status is active in the current editor
+		 * @function
+		 * @returns {Boolean} If linked mode status is active
+		 */
 		isStatusActive: function() {
 			return !!this.linkedModeModel;
 		},
+		/**
+		 * @description Selects the group of the given index from the currently active model
+		 * @param {Number} index The group index to select
+		 */
 		selectLinkedGroup: function(index) {
 			var model = this.linkedModeModel;
 			if (model) {
@@ -32237,8 +32633,11 @@ define("orion/editor/linkedMode", [ //$NON-NLS-0$
 				var contentAssist = this.contentAssist;
 				if (contentAssist) {
 					contentAssist.offset = undefined;
-					if (group.data && group.data.type === "link" && group.data.values) { //$NON-NLS-0$
+					if (group.data && group.data.type === "link" && group.data.values) {
 						var provider = this._groupContentAssistProvider = new LinkedContentAssist(group.data);
+						/**
+						 * @callback 
+						 */
 						provider.getPrefix = function() {
 							var selection = editor.getSelection();
 							if (selection.start === selection.end) {
@@ -32260,6 +32659,14 @@ define("orion/editor/linkedMode", [ //$NON-NLS-0$
 			}
 			this._updateAnnotations();
 		},
+		/**
+		 * @description Collect all model positions into the <code>all</code> array
+		 * @function
+		 * @private
+		 * @param {Array.<Object>} all The collector for the position objects
+		 * @param {Object} model The linked model to collect all positions from
+		 * @param {Object} delta The change in position
+		 */
 		_getModelPositions: function(all, model, delta) {
 			var groups = model.groups;
 			for (var i = 0; i < groups.length; i++) {
@@ -32284,6 +32691,13 @@ define("orion/editor/linkedMode", [ //$NON-NLS-0$
 				}
 			}
 		},
+		/**
+		 * @description Returns an array of all of the positions sorted 
+		 * @function
+		 * @private
+		 * @param {Object} model The linked model to get and sort positions from
+		 * @returns {Array.<Object>} The sorted array of positions from the given model
+		 */
 		_getSortedPositions: function(model) {
 			var all = this._sortedPositions;
 			if (!all) {
@@ -32296,7 +32710,7 @@ define("orion/editor/linkedMode", [ //$NON-NLS-0$
 				this._getModelPositions(all, model);
 				// Add escape position for all models
 				while (model) {
-					if (typeof model.escapePosition === "number") { //$NON-NLS-0$
+					if (typeof model.escapePosition === "number") {
 						all.push({
 							escape: true,
 							model: model,
@@ -32312,12 +32726,22 @@ define("orion/editor/linkedMode", [ //$NON-NLS-0$
 			}
 			return all;
 		},
+		/**
+		 * @description Returns if the given start - end position has changed in the given model
+		 * @function
+		 * @private
+		 * @param {Object} model The model to check
+		 * @param {Number} start The start
+		 * @param {Number} end The end
+		 * @returns {Object} The changed position
+		 */
 		_getPositionChanged: function(model, start, end) {
 			var changed;
 			var sortedPositions = this._getSortedPositions(model);
 			for (var i = sortedPositions.length - 1; i >= 0; i--) {
-				if (sortedPositions[i].escape)
+				if (sortedPositions[i].escape) {
 					continue;
+				}
 				var position = sortedPositions[i].position;
 				if (position.offset <= start && end <= position.offset + position.length) {
 					changed = sortedPositions[i];
@@ -32326,6 +32750,12 @@ define("orion/editor/linkedMode", [ //$NON-NLS-0$
 			}
 			return {position: changed, positions: sortedPositions};
 		},
+		/**
+		 * @description Updates the editor annotations based on the given positions
+		 * @function
+		 * @private
+		 * @param {Array.<Object>} positions The positions
+		 */
 		_updateAnnotations: function(positions) {
 			var annotationModel = this.editor.getAnnotationModel();
 			if (!annotationModel) { return; }
@@ -34204,7 +34634,7 @@ define("orion/editor/contentAssist", [ //$NON-NLS-0$
 		/** @private */
 		getPrefixStart: function(model, end) {
 			var index = end;
-			while (index > 0 && /[A-Za-z0-9_=\"]/.test(model.getText(index - 1, index))) {
+			while (index > 0 && /[A-Za-z0-9_]/.test(model.getText(index - 1, index))) {
 				index--;
 			}
 			return index;
@@ -40685,9 +41115,9 @@ define('orion/markOccurrences',[
 					function(serviceRefs) {
 						var capableServiceRefs = [];
 						for (var i=0; i < serviceRefs.length; i++) {
-							var serviceRef = serviceRefs[i];
-							if (serviceRef && !serviceRef._error) {
-								capableServiceRefs.push(serviceRef);
+							var currentServiceRef = serviceRefs[i];
+							if (currentServiceRef && !currentServiceRef._error) {
+								capableServiceRefs.push(currentServiceRef);
 							}
 						}
 						return capableServiceRefs;
@@ -40713,26 +41143,43 @@ define('orion/markOccurrences',[
 						selection: selections[0],
 						contentType: that.inputManager.getContentType().id
 					};
-					if(that.occurrencesService) {
-						that.occurrencesService.computeOccurrences(editor.getEditorContext(), context).then(function (occurrences) {
-							that.editor.showOccurrences(occurrences);
-						});	
+					
+					if(Array.isArray(that.occurrencesServices) && that.occurrencesServices.length > 0) {
+						var servicePromises = [];
+						var allOccurrences = [];
+						for (var i=0; i<that.occurrencesServices.length; i++) {
+							var serviceEntry = that.occurrencesServices[i];
+							if (serviceEntry){
+								servicePromises.push(serviceEntry.computeOccurrences(editor.getEditorContext(), context).then(function (occurrences) {
+									allOccurrences = allOccurrences.concat(occurrences);
+								}));	
+							}
+						}
+						Deferred.all(servicePromises).then(function(){
+							that.editor.showOccurrences(allOccurrences);
+						});
 					}
 				}, 500);
 			};
 						
-			that.inputManager.addEventListener("InputChanged", function(evt) {//$NON-NLS-0$
+			that.inputManager.addEventListener("InputChanged", function(evt) {
 				var textView = that.editor.getTextView();
 				if (textView) {
-					textView.removeEventListener("Selection", selectionListener); //$NON-NLS-0$
+					textView.removeEventListener("Selection", selectionListener);
 					getServiceRefs(that.registry, evt.contentType, evt.title).then(function(serviceRefs) {
 						if (!serviceRefs || serviceRefs.length === 0) {
 							if (occurrenceTimer) {
 								window.clearTimeout(occurrenceTimer);
 							}
 						} else {
-							that.occurrencesService = that.registry.getService(serviceRefs[0]);
-							textView.addEventListener("Selection", selectionListener); //$NON-NLS-0$
+							that.occurrencesServices = [];
+							for (var a=0; a<serviceRefs.length; a++) {
+								var service = that.registry.getService(serviceRefs[a]);
+								if (service){
+									that.occurrencesServices.push(service);
+								}
+							}
+							textView.addEventListener("Selection", selectionListener);
 						}
 					});
 				}
@@ -41861,7 +42308,7 @@ define('orion/webui/contextmenu',[
 });
 /*******************************************************************************
  * @license
- * Copyright (c) 2010, 2014 IBM Corporation and others.
+ * Copyright (c) 2010, 2016 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials are made
  * available under the terms of the Eclipse Public License v1.0
  * (http://www.eclipse.org/legal/epl-v10.html), and the Eclipse Distribution
@@ -41877,8 +42324,7 @@ define('orion/editorView',[
 	'orion/editor/editor',
 	'orion/editor/eventTarget',
 	'orion/editor/textView',
-	'orion/editor/textModel',
-	'orion/editor/projectionTextModel',
+	'orion/editor/textModelFactory',
 	'orion/editor/editorFeatures',
 	'orion/hover',
 	'orion/editor/contentAssist',
@@ -41908,7 +42354,7 @@ define('orion/editorView',[
 	'orion/objects'
 ], function(
 	messages,
-	mEditor, mEventTarget, mTextView, mTextModel, mProjectionTextModel, mEditorFeatures, mHoverFactory, mContentAssist,
+	mEditor, mEventTarget, mTextView, mTextModelFactory, mEditorFeatures, mHoverFactory, mContentAssist,
 	mEmacs, mVI, mEditorPreferences, mThemePreferences, mThemeData, EditorSettings,
 	mSearcher, mEditorCommands, mGlobalCommands,
 	mDispatcher, EditorContext, Highlight,
@@ -42176,7 +42622,7 @@ define('orion/editorView',[
 				var options = that.updateViewOptions(that.settings);
 				objects.mixin(options, {
 					parent: that._parent,
-					model: new mProjectionTextModel.ProjectionTextModel(that.model || new mTextModel.TextModel()),
+					model: new mTextModelFactory.TextModelFactory().createProjectionTextModel(that.model, {serviceRegistry: that.serviceRegistry}),
 					wrappable: true
 				});
 				var textView = new mTextView.TextView(options);
@@ -42188,7 +42634,12 @@ define('orion/editorView',[
 			 */
 			var keyBindingFactory = function(editor, keyModeStack, undoStack, contentAssist) {
 
-				var localSearcher = that.textSearcher = mSearcher.TextSearcher ? new mSearcher.TextSearcher(editor, serviceRegistry, commandRegistry, undoStack) : null;
+				//Allow extended TextModelFactory to pass default find options
+				var defaultFindOptions, factory = new mTextModelFactory.TextModelFactory();
+				if(typeof factory.getDefaultFindOptions === "function") {
+					defaultFindOptions = factory.getDefaultFindOptions();
+				}
+				var localSearcher = that.textSearcher = mSearcher.TextSearcher ? new mSearcher.TextSearcher(editor, serviceRegistry, commandRegistry, undoStack, defaultFindOptions) : null;
 
 				var keyBindings = new mEditorFeatures.KeyBindingsFactory().createKeyBindings(editor, undoStack, contentAssist, localSearcher);
 				that.updateSourceCodeActions(that.settings, keyBindings.sourceCodeActions);
@@ -42375,10 +42826,11 @@ define('orion/editorView',[
 			markOccurrences.findOccurrences();
 			
 			var syntaxChecker = new mSyntaxchecker.SyntaxChecker(serviceRegistry, editor.getModel());
-			editor.addEventListener("InputChanged", function(evt) {
+
+			function syntaxCheck(title, message, contents) {
 				syntaxChecker.setTextModel(editor.getModel());
 				var input = inputManager.getInput();
-				syntaxChecker.checkSyntax(inputManager.getContentType(), evt.title, evt.message, evt.contents, editor.getEditorContext()).then(function(problems) {
+				syntaxChecker.checkSyntax(inputManager.getContentType(), title, message, contents, editor.getEditorContext()).then(function(problems) {
 					if (input === inputManager.getInput() && problems) {
 						serviceRegistry.getService(that.problemsServiceID)._setProblems(problems);
 					}
@@ -42386,6 +42838,10 @@ define('orion/editorView',[
 				if (inputManager.getReadOnly()) {
 					editor.reportStatus(messages.readonly, "error"); //$NON-NLS-0$
 				}
+			}
+
+			editor.addEventListener("InputChanged", function(evt) {
+				syntaxCheck(evt.title, evt.message, evt.contents);
 			});
 
 			var contextImpl = Object.create(null);
@@ -42410,6 +42866,9 @@ define('orion/editorView',[
 			contextImpl.exitLinkedMode = function(escapePosition) {
 				editor.getLinkedMode().exitLinkedMode(escapePosition);
 			};
+			contextImpl.syntaxCheck = function(title, message, contents) {
+				syntaxCheck(title, message, contents);
+			}
 			/**
 			 * @description Opens the given location
 			 * @function
