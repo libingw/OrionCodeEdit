@@ -232,16 +232,16 @@ define('orion/nls/root/messages',{//Default message bundle
 	"EditorRelatedLinkParent": "Show Enclosing Folder",
 	"EditorLinkWorkspace": "Edit",
 	"EditorRelatedLinkProj": "Show Project",
-	"navigationBar": "Navigation Bar",
+	"sidebar": "Sidebar",
 	"Filter bindings": "Filter bindings",
 	"BindingPrompt": "Enter the new binding",
 	"NoBinding": "---",
 	"orionClientLabel": "Orion client repository",
-	"Orion Editor": "Orion Editor",
-	"Orion Image Viewer": "Orion Image Viewer",
-	"Orion Markdown Editor": "Orion Markdown Editor",
-	"Orion Markdown Viewer": "Orion Markdown Viewer",
-	"Orion JSON Editor": "Orion JSON Editor",
+	"Orion Editor": "Text Editor",
+	"Orion Image Viewer": "Image Viewer",
+	"Orion Markdown Editor": "Markdown Editor",
+	"Orion Markdown Viewer": "Markdown Viewer",
+	"Orion JSON Editor": "JSON Editor",
 	"View on Site": "View on Site",
 	"View this file or folder on a web site hosted by Orion": "View this file or folder on a web site hosted by Orion.",
 	"ShowAllKeyBindings": "Show a list of all the keybindings on this page",
@@ -291,7 +291,7 @@ define('orion/nls/root/messages',{//Default message bundle
 	"Regular expression" : "Regular expression",
 	"Search options" : "Search options",
 	"Global search" : "Global search",
-	"Orion Home" : "Orion Home",
+	"Orion Home" : "Home",
 	"Close notification" : "Close notification",
 	"OpPressSpaceMsg" : "Operations - Press spacebar to show current operations",
 	"Toggle side panel" : "Toggle side panel",
@@ -406,6 +406,7 @@ define('orion/util',[],function() {
 	var isIPad = userAgent.indexOf("iPad") !== -1; //$NON-NLS-0$
 	var isIPhone = userAgent.indexOf("iPhone") !== -1; //$NON-NLS-0$
 	var isIOS = isIPad || isIPhone;
+	var isElectron = userAgent.indexOf("Electron") !== -1; //$NON-NLS-0$
 	var isMac = navigator.platform.indexOf("Mac") !== -1; //$NON-NLS-0$
 	var isWindows = navigator.platform.indexOf("Win") !== -1; //$NON-NLS-0$
 	var isLinux = navigator.platform.indexOf("Linux") !== -1; //$NON-NLS-0$
@@ -425,11 +426,26 @@ define('orion/util',[],function() {
 		}
 		return document.createElement(tagName);
 	}
+	function confineDialogTab(firstElement, lastElement) {
+		lastElement.addEventListener("keydown", function(evt) {
+			if(evt.keyCode === 9 && !evt.shiftKey) {
+				evt.preventDefault();
+				firstElement.focus();
+			}
+		});
+		firstElement.addEventListener("keydown", function(evt) {
+			if(evt.keyCode === 9 && evt.shiftKey) {
+				evt.preventDefault();
+				lastElement.focus();
+			}
+		});
+	}
 
 	return {
 		formatMessage: formatMessage,
 		
 		createElement: createElement,
+		confineDialogTab: confineDialogTab,
 		
 		/** Browsers */
 		isIE: isIE,
@@ -442,6 +458,7 @@ define('orion/util',[],function() {
 		isIPad: isIPad,
 		isIPhone: isIPhone,
 		isIOS: isIOS,
+		isElectron: isElectron,
 		
 		/** OSs */
 		isMac: isMac,
@@ -2228,10 +2245,13 @@ define('orion/webui/tooltip',['orion/webui/littlelib'], function(lib) {
 				var self = this;
 				lib.addAutoDismiss([this._tip, this._node], function() {self.hide();});
 				if (this._trigger === "mouseover") { //$NON-NLS-0$
-					 this._tipInner.setAttribute("role", "tooltip"); //$NON-NLS-2$ //$NON-NLS-1$
-					 this._tipInner.id = "tooltip" + new Date().getTime().toString(); //$NON-NLS-0$
-					 this._node.setAttribute("aria-describedby", this._tipInner.id); //$NON-NLS-0$
-				
+					this._tipInner.setAttribute("role", "tooltip"); //$NON-NLS-2$ //$NON-NLS-1$
+					this._tipInner.id = "tooltip" + new Date().getTime().toString(); //$NON-NLS-0$
+					var label = this._node.getAttribute("aria-label");
+					if (this._text !== label) {
+						this._node.setAttribute("aria-describedby", this._tipInner.id); //$NON-NLS-0$
+				 	}
+
 					// see https://bugs.eclipse.org/bugs/show_bug.cgi?id=398960
 					// mousing over the tip itself will cancel any pending timeout to close it, but then we must
 					// also close it when we leave the tip.
@@ -2805,9 +2825,9 @@ define('orion/commands',[
 		
 		var quickfixSettings = '/languageTools/quickfix'; //$NON-NLS-1$
 		
-		element = document.createElement("div"); //$NON-NLS-1$
+		element = document.createElement("div");
 		
-		button = clickTarget = document.createElement("button"); //$NON-NLS-1$
+		button = clickTarget = document.createElement("button");
 		button.className = "orionButton"; //$NON-NLS-1$
 		if (command.extraClass) {
 			button.classList.add(command.extraClass);
@@ -2850,7 +2870,7 @@ define('orion/commands',[
 			}, false);
 		}
 		if (parentElement.nodeName.toLowerCase() === "ul") {
-			var li = document.createElement("li"); //$NON-NLS-0$
+			var li = document.createElement("li");
 			parentElement.appendChild(li);
 			parentElement = li;
 		} else {
@@ -2861,13 +2881,13 @@ define('orion/commands',[
 		// We check that the internal access to annotation model exists so if it breaks we don't show the checkbox at all rather than throw an error later
 		if (command.fixAllEnabled && commandInvocation.userData._annotationModel){
 			var id = command.id + 'fixAll'; //$NON-NLS-1$
-			fixAllCheckbox = document.createElement('input'); //$NON-NLS-1$
+			fixAllCheckbox = document.createElement('input');
 			fixAllCheckbox.type = 'checkbox'; //$NON-NLS-1$
 			fixAllCheckbox.className = "quickfixAllParameter"; //$NON-NLS-1$
 			fixAllCheckbox.checked = true;
 			fixAllCheckbox.id = id;
 			
-			fixAllLabel = document.createElement('label'); //$NON-NLS-1$
+			fixAllLabel = document.createElement('label');
 			fixAllLabel.htmlFor = id;
 			fixAllLabel.className = "quickfixAllParameter"; //$NON-NLS-1$
 			fixAllLabel.appendChild(document.createTextNode(messages['fixAll'])); 
@@ -3058,14 +3078,14 @@ define('orion/commands',[
 		var dropdown = parent.dropdown;
 		if (typeof(command.hrefCallback) === 'function') {
 			li = Dropdown.createMenuItem(command.name, "a"); //$NON-NLS-0$
-			element = li.firstElementChild;
+			commandInvocation.domNode = element = li.firstElementChild;
 			var href = command.hrefCallback.call(commandInvocation.handler, commandInvocation);
 			if (href.then){
 				href.then(function(l){
 					element.href = l;
 				});
 			} else if (href) {
-				element.href = href; 
+				element.href = href;
 			} else {  // no href
 				element.href = "#"; //$NON-NLS-0$
 			}
@@ -5831,6 +5851,7 @@ define('orion/commandRegistry',[
 								id = renderType + command.id + index; // using the index ensures unique ids within the DOM when a command repeats for each item
 								var commandDiv = document.createElement("div"); //$NON-NLS-0$
 								parent.appendChild(commandDiv);
+								parent.classList.add('quickFixList');
 								element = Commands.createQuickfixItem(commandDiv, command, invocation, onClick, self._prefService);
 							} else {
 								id = renderType + command.id + index;  // // using the index ensures unique ids within the DOM when a command repeats for each item
@@ -6336,6 +6357,7 @@ define('orion/navigate/nls/root/messages',{//Default message bundle
 	"File": "File",
 	"Actions": "Actions",
 	"Orion Content": "Orion Content",
+	"File System": "File System",
 	"Create new content": "Create new content",
 	"Import from HTTP...": "HTTP",
 	"File URL:": "File URL:",
@@ -6669,10 +6691,26 @@ define('orion/fileClient',[
 			var i = this._getServiceIndex(itemLocation);
 			return i === -1 ? _allFileSystemsService.Location : _fileSystemsRoots[i].Location;
 		};
+		
+		this._frozenEvent = {type: "Changed"};
+		this._eventFrozenMode = false;
+		
 		serviceRegistry.registerService("orion.core.file.client", this); //$NON-NLS-1$
 	}
 	
 	FileClient.prototype = /**@lends orion.fileClient.FileClient.prototype */ {
+		freezeChangeEvents: function() {
+			this._frozenEvent = {type: "Changed"};
+			this._eventFrozenMode = true;
+		},
+		thawChangeEvents: function() {
+			this._eventFrozenMode = false;
+			this.dispatchEvent(this._frozenEvent); //$NON-NLS-0$
+		},
+		isEventFrozen: function() {
+			return this._eventFrozenMode;
+		},
+		
 		/**
 		 * Returns the file service managing this location
 		 * @param {String} itemLocation The location of the item
@@ -6750,6 +6788,20 @@ define('orion/fileClient',[
 			return _doServiceCall(this._getService(), "changeWorkspace", arguments); //$NON-NLS-1$
 		},
 		
+		_createArtifact: function(parentLocation, funcName, eventData, funcArgs) {
+			return _doServiceCall(this._getService(parentLocation), funcName, funcArgs).then(function(result){ //$NON-NLS-0$
+				if(this.isEventFrozen()) {
+					if(!this._frozenEvent.created) {
+						this._frozenEvent.created = [];
+					}
+					this._frozenEvent.created.push({parent: parentLocation, result: result, eventData: eventData});
+				} else {
+					this.dispatchEvent({ type: "Changed", created: [{parent: parentLocation, result: result, eventData: eventData}]}); //$NON-NLS-0$
+				}
+				return result;
+			}.bind(this));
+		},
+		
 		/**
 		 * Adds a project to a workspace.
 		 * @param {String} url The workspace location
@@ -6761,37 +6813,54 @@ define('orion/fileClient',[
 		 */
 		createProject: function(url, projectName, serverPath, create) {
 			return _doServiceCall(this._getService(url), "createProject", arguments); //$NON-NLS-1$
+			//return this._createArtifact(url, "createProject", arguments);
 		},
 		/**
 		 * Creates a folder.
 		 * @param {String} parentLocation The location of the parent folder
 		 * @param {String} folderName The name of the folder to create
+		 * @param {Object} eventData The event data that will be sent back.
 		 * @return {Object} JSON representation of the created folder
 		 * @public
 		 * @return {Deferred} A deferred that will create a new folder in the workspace
 		 */
-		createFolder: function(parentLocation, folderName) {
-			return _doServiceCall(this._getService(parentLocation), "createFolder", arguments); //$NON-NLS-1$
+		createFolder: function(parentLocation, folderName, eventData) {
+			//return _doServiceCall(this._getService(parentLocation), "createFolder", arguments); //$NON-NLS-1$
+			return this._createArtifact(parentLocation, "createFolder", eventData, arguments);
 		},
 		/**
 		 * Create a new file in a specified location. Returns a deferred that will provide
 		 * The new file object when ready.
 		 * @param {String} parentLocation The location of the parent folder
 		 * @param {String} fileName The name of the file to create
+		 * @param {Object} eventData The event data that will be sent back.
 		 * @public
 		 * @return {Deferred} A deferred that will provide the new file object
 		 */
-		createFile: function(parentLocation, fileName) {
-			return _doServiceCall(this._getService(parentLocation), "createFile", arguments); //$NON-NLS-1$
+		createFile: function(parentLocation, fileName, eventData) {
+			//return _doServiceCall(this._getService(parentLocation), "createFile", arguments); //$NON-NLS-1$
+			return this._createArtifact(parentLocation, "createFile", eventData, arguments);
 		},
 		/**
 		 * Deletes a file, directory, or project.
 		 * @param {String} deleteLocation The location of the file or directory to delete.
+		 * @param {Object} eventData The event data that will be sent back.
 		 * @public
 		 * @returns {Deferred} A deferred that will delete the given file
 		 */
-		deleteFile: function(deleteLocation) {
-			return _doServiceCall(this._getService(deleteLocation), "deleteFile", arguments); //$NON-NLS-1$
+		deleteFile: function(deleteLocation, eventData) {
+			//return _doServiceCall(this._getService(deleteLocation), "deleteFile", arguments); //$NON-NLS-1$
+			return _doServiceCall(this._getService(deleteLocation), "deleteFile", arguments).then(function(result){ //$NON-NLS-0$
+				if(this.isEventFrozen()) {
+					if(!this._frozenEvent.deleted) {
+						this._frozenEvent.deleted = [];
+					}
+					this._frozenEvent.deleted.push({deleteLocation: deleteLocation, eventData: eventData});
+				} else {
+					this.dispatchEvent({ type: "Changed", deleted: [{deleteLocation: deleteLocation, eventData: eventData}]}); //$NON-NLS-0$
+				}
+				return result;
+			}.bind(this));
 		},
 		
 		/**		 
@@ -6807,7 +6876,18 @@ define('orion/fileClient',[
 			var targetService = this._getService(targetLocation);
 			
 			if (sourceService === targetService) {
-				return _doServiceCall(sourceService, "moveFile", arguments);				 //$NON-NLS-1$
+				//return _doServiceCall(sourceService, "moveFile", arguments);
+				return _doServiceCall(sourceService, "moveFile", arguments).then(function(result){ //$NON-NLS-0$
+					if(this.isEventFrozen()) {
+						if(!this._frozenEvent.moved) {
+							this._frozenEvent.moved = [];
+						}
+						this._frozenEvent.moved.push({source: sourceLocation, target: targetLocation, result: result});
+					} else {
+						this.dispatchEvent({ type: "Changed", moved: [{source: sourceLocation, target: targetLocation, result: result}]}); //$NON-NLS-0$
+					}
+					return result;
+				}.bind(this));
 			}
 			
 			var isDirectory = sourceLocation[sourceLocation.length -1] === "/";
@@ -6850,7 +6930,18 @@ define('orion/fileClient',[
 			var targetService = this._getService(targetLocation);
 			
 			if (sourceService === targetService) {
-				return _doServiceCall(sourceService, "copyFile", arguments);				 //$NON-NLS-1$
+				//return _doServiceCall(sourceService, "copyFile", arguments);				 //$NON-NLS-1$
+				return _doServiceCall(sourceService, "copyFile", arguments).then(function(result){ //$NON-NLS-0$
+					if(this.isEventFrozen()) {
+						if(!this._frozenEvent.copied) {
+							this._frozenEvent.copied = [];
+						}
+						this._frozenEvent.copied.push({source: sourceLocation, target: targetLocation, result: result});
+					} else {
+						this.dispatchEvent({ type: "Changed", copied: [{source: sourceLocation, target: targetLocation, result: result}]}); //$NON-NLS-0$
+					}
+					return result;
+				}.bind(this));
 			}
 			
 			var isDirectory = sourceLocation[sourceLocation.length -1] === "/";
@@ -6911,7 +7002,18 @@ define('orion/fileClient',[
 		 * @return {Deferred} A deferred for chaining events after the write completes with new metadata object
 		 */		
 		write: function(writeLocation, contents, args) {
-			return _doServiceCall(this._getService(writeLocation), "write", arguments); //$NON-NLS-1$
+			//return _doServiceCall(this._getService(writeLocation), "write", arguments); //$NON-NLS-1$
+			return _doServiceCall(this._getService(writeLocation), "write", arguments).then(function(result){ //$NON-NLS-0$
+				if(this.isEventFrozen()) {
+					if(!this._frozenEvent.modified) {
+						this._frozenEvent.modified = [];
+					}
+					this._frozenEvent.modified.push(writeLocation);
+				} else {
+					this.dispatchEvent({ type: "Changed", modified: [writeLocation]}); //$NON-NLS-0$
+				}
+				return result;
+			}.bind(this));
 		},
 
 		/**
@@ -6922,8 +7024,19 @@ define('orion/fileClient',[
 		 * @public
 		 * @return {Deferred} A deferred for chaining events after the import completes
 		 */		
-		remoteImport: function(targetLocation, options) {
-			return _doServiceCall(this._getService(targetLocation), "remoteImport", arguments); //$NON-NLS-1$
+		remoteImport: function(targetLocation, options, parentLocation) {
+			//return _doServiceCall(this._getService(targetLocation), "remoteImport", arguments); //$NON-NLS-1$
+			return _doServiceCall(this._getService(targetLocation), "remoteImport", arguments).then(function(result){ //$NON-NLS-0$
+				if(this.isEventFrozen()) {
+					if(!this._frozenEvent.copied) {
+						this._frozenEvent.copied = [];
+					}
+					this._frozenEvent.copied.push({target: parentLocation});
+				} else {
+					this.dispatchEvent({ type: "Changed", copied: [{target: parentLocation}]}); //$NON-NLS-0$
+				}
+				return result;
+			}.bind(this));
 		},
 
 		/**
@@ -7557,6 +7670,7 @@ define('orion/edit/nls/root/messages',{
 	"OpenWith": "Open With",
 	"OpenRelated": "Open Related",
 	"OpenFolder": "Open Folder",
+	"OpenRecent": "Open Recent",
 	"OpenFolderTip": "Change the root folder",
 	"Dependency": "Dependency",
 	"UnnamedCommand": "Unnamed",
@@ -8894,8 +9008,8 @@ define('orion/PageLinks',[
  *     IBM Corporation - initial API and implementation
  *******************************************************************************/
 /*eslint-env browser, amd*/
-define('orion/extensionCommands',["orion/Deferred", "orion/commands", "orion/contentTypes", "orion/URITemplate", "orion/i18nUtil", "orion/PageLinks", "i18n!orion/edit/nls/messages", "orion/URL-shim"],
-	function(Deferred, mCommands, mContentTypes, URITemplate, i18nUtil, PageLinks, messages){
+define('orion/extensionCommands',["orion/Deferred", "orion/commands", 	'orion/PageUtil', "orion/contentTypes", "orion/URITemplate", "orion/i18nUtil", "orion/PageLinks", "i18n!orion/edit/nls/messages", "orion/URL-shim"],
+	function(Deferred, mCommands, PageUtil, mContentTypes, URITemplate, i18nUtil, PageLinks, messages){
 
 	/**
 	 * Utility methods
@@ -9320,7 +9434,25 @@ define('orion/extensionCommands',["orion/Deferred", "orion/commands", "orion/con
 				if (validator.generatesURI.bind(validator)()) {
 					commandOptions.hrefCallback = function(data){
 						var item = Array.isArray(data.items) ? data.items[0] : data.items;
-						return validator.getURI.bind(validator)(item);
+						var href = validator.getURI.bind(validator)(item);
+						if (data.command && data.command.isEditor) {
+							data.domNode.addEventListener("click", function(evt) {
+								if(item.Location) {
+									var resourceParam = PageUtil.matchResourceParameters();
+									if(resourceParam.resource !== item.Location) {
+										data.domNode.target = "_blank";
+										return;
+									}
+									var cmdHrefParam = PageUtil.matchResourceParameters(href);
+									if(cmdHrefParam && cmdHrefParam.editor === resourceParam.editor) {
+										data.domNode.target = "_blank";
+										return;
+									}
+								}
+								data.domNode.target = "";
+							});
+						}
+						return href;
 					};
 				} else {
 					var inf = info;
@@ -11126,6 +11258,7 @@ define('orion/editor/nls/root/messages',{//Default message bundle
 	"incrementalFindStrNotFound": "Incremental find: ${0} (not found)", //$NON-NLS-1$ //$NON-NLS-0$
 	"incrementalFindReverseStr": "Reverse Incremental find: ${0}", //$NON-NLS-1$ //$NON-NLS-0$
 	"incrementalFindReverseStrNotFound": "Reverse Incremental find: ${0} (not found)", //$NON-NLS-1$ //$NON-NLS-0$
+	"findReplace": "Find/Replace", //$NON-NLS-1$ //$NON-NLS-0$
 	"find": "Find...", //$NON-NLS-1$ //$NON-NLS-0$
 	"undo": "Undo", //$NON-NLS-1$ //$NON-NLS-0$
 	"redo": "Redo", //$NON-NLS-1$ //$NON-NLS-0$
@@ -11224,7 +11357,7 @@ define('orion/editor/nls/root/messages',{//Default message bundle
 	"regex": "/.*/", //$NON-NLS-1$ //$NON-NLS-0$
 	"wholeWord": "\\b", //$NON-NLS-1$ //$NON-NLS-0$
 	"caseInsensitiveTooltip": "Toggle Case Insensitive", //$NON-NLS-1$ //$NON-NLS-0$
-	"regexTooltip": "Toggle Regex", //$NON-NLS-1$ //$NON-NLS-0$
+	"regexTooltip": "Toggle Regular Expression", //$NON-NLS-1$ //$NON-NLS-0$
 	"wholeWordTooltip": "Toggle Whole Word", //$NON-NLS-1$ //$NON-NLS-0$
 	"closeTooltip": "Close", //$NON-NLS-1$ //$NON-NLS-0$
 
@@ -12350,6 +12483,7 @@ define('orion/editorCommands',[
 		this.serviceRegistry = options.serviceRegistry;
 		this.commandService = options.commandRegistry;
 		this.fileClient = options.fileClient;
+		this.preferences = options.preferences;
 		this.inputManager = options.inputManager;
 		this.renderToolbars = options.renderToolbars;
 		this.toolbarId = options.toolbarId;
@@ -12394,7 +12528,27 @@ define('orion/editorCommands',[
 			this._createEncodingCommand();
 			this._createSaveCommand();
 			this._createOpenFolderCommand();
+			this._createOpenRecentCommand();
 			return this._createEditCommands();
+		},
+		updateWorkspacePrefs:function(workspaceAddress){
+			var that = this;
+			return this.preferences.get("/workspace").then(function(prefs) {
+				return prefs.recentWorkspaces ? prefs.recentWorkspaces : [];
+			}).then(function(recentworkspaces){
+				var RECENT_ARRAY_LENGTH = 10;
+				var oldIndex = recentworkspaces.indexOf(workspaceAddress);
+				if(oldIndex !== -1){
+					recentworkspaces.splice(oldIndex,1);
+				}
+				if(recentworkspaces.length < RECENT_ARRAY_LENGTH){
+					recentworkspaces.unshift(workspaceAddress);
+				}else if(recentworkspaces.length === RECENT_ARRAY_LENGTH){
+					recentworkspaces.pop();
+					recentworkspaces.unshift(workspaceAddress);
+				}
+				return that.preferences.put("/workspace",{recentWorkspaces: recentworkspaces, currentWorkspace: workspaceAddress});
+			})
 		},
 		//TODO: We need a better way invoke side bar action 
 		setSideBar: function(sideBar) {
@@ -12454,6 +12608,7 @@ define('orion/editorCommands',[
 			commandRegistry.registerCommandContribution(this.editToolbarId || this.toolbarId, "orion.edit.undo", 400, this.editToolbarId ? "orion.menuBarEditGroup/orion.edit.undoGroup" : null, !this.editToolbarId, new mKeyBinding.KeyBinding('z', true), null, this); //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-3$
 			commandRegistry.registerCommandContribution(this.editToolbarId || this.toolbarId, "orion.edit.redo", 401, this.editToolbarId ? "orion.menuBarEditGroup/orion.edit.undoGroup" : null, !this.editToolbarId, util.isMac ? new mKeyBinding.KeyBinding('z', true, true) : new mKeyBinding.KeyBinding('y', true), null, this); //$NON-NLS-3$ //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-4$
 			commandRegistry.registerCommandContribution(this.saveToolbarId || this.toolbarId, "orion.edit.openFolder", 1, this.saveToolbarId ? "orion.menuBarFileGroup/orion.edit.saveGroup" : null, false, new mKeyBinding.KeyBinding('o', true)); //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-0$
+			commandRegistry.registerCommandContribution(this.saveToolbarId || this.toolbarId, "orion.edit.openRecent", 3, this.saveToolbarId ? "orion.menuBarFileGroup/orion.edit.saveGroup" : null, false, new mKeyBinding.KeyBinding('r', true)); //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-0$
 			commandRegistry.registerCommandContribution(this.saveToolbarId || this.toolbarId, "orion.openResource", 1, this.saveToolbarId ? "orion.menuBarFileGroup/orion.edit.saveGroup" : null, false, new mKeyBinding.KeyBinding('f', true, true)); //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-0$
 			commandRegistry.registerCommandContribution(this.saveToolbarId || this.toolbarId, "orion.edit.save", 2, this.saveToolbarId ? "orion.menuBarFileGroup/orion.edit.saveGroup" : null, false, new mKeyBinding.KeyBinding('s', true), null, this); //$NON-NLS-3$ //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-3$
 			commandRegistry.registerCommandContribution(this.editToolbarId || this.pageNavId, "orion.edit.gotoLine", 3, this.editToolbarId ? "orion.menuBarEditGroup/orion.findGroup" : null, !this.editToolbarId, new mKeyBinding.KeyBinding('l', !util.isMac, false, false, util.isMac), new mCommandRegistry.URLBinding("gotoLine", "line"), this); //$NON-NLS-4$ //$NON-NLS-3$ //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-5$
@@ -12544,11 +12699,13 @@ define('orion/editorCommands',[
 				var textView = editor.getTextView();
 				textView.setKeyBinding(new mKeyBinding.KeyBinding('s', true), "save"); //$NON-NLS-1$ //$NON-NLS-2$
 				var saveCommand = that.commandService.findCommand("orion.edit.save"); //$NON-NLS-0$
-				textView.setAction("save", function() { //$NON-NLS-0$
-					saveCommand.callback.call({inputManager: that.inputManager});
-					return true;
-				}, saveCommand); //$NON-NLS-0$
-			
+				if (saveCommand) {
+					textView.setAction("save", function() { //$NON-NLS-0$
+						saveCommand.callback.call({inputManager: that.inputManager});
+						return true;
+					}, saveCommand); //$NON-NLS-0$
+				}
+
 				textView.setAction("gotoLine", function (data) { //$NON-NLS-0$
 					if (data) {
 						editor.onGotoLine(data.line - 1, 0, undefined, data.callback);
@@ -12725,7 +12882,7 @@ define('orion/editorCommands',[
 		_createClipboardCommands: function() {
 			
 			//TODO - test to see whether copy/cut/paste is supported instead of IE
-			if (util.isIE) {
+			if (util.isIE || util.isElectron) {
 				var that = this;
 				
 				var copyCommand = new mCommands.Command({
@@ -12848,12 +13005,50 @@ define('orion/editorCommands',[
 					window.__dialogModule.showOpenDialog({properties: ['openDirectory']}, function(result) {
 						if (!result) return;
 						that.fileClient.changeWorkspace(result[0]).then(function() {
+							return that.updateWorkspacePrefs(result[0]);
+						}).then(function(){
+							delete sessionStorage.lastFile;
+							window.location.hash = "";
 							window.location.reload();
-						});
+						})				
 					});
 				}
 			});
 			this.commandService.addCommand(openFolderCommand);
+		},
+		_createOpenRecentCommand: function() {
+			var that = this;		
+			if(this.preferences){
+				this.preferences.get("/workspace").then(function(prefs) {
+					return prefs.recentWorkspaces;
+				}).then(function(recentworkspaces){
+					var openRecentCommand = new mCommands.Command({
+						name: messages.OpenRecent,
+						selectionClass: "dropdownSelection", //$NON-NLS-0$
+						id: "orion.edit.openRecent", //$NON-NLS-0$
+						visibleWhen: /** @callback */ function(items, data) {
+							return !!window.__dialogModule && !!recentworkspaces;
+						},
+						choiceCallback: function() {
+							return recentworkspaces.map(function(folderLocation) {
+								return {
+									name: folderLocation,
+									callback: function() {
+										that.fileClient.changeWorkspace(folderLocation).then(function() {
+											return that.updateWorkspacePrefs(folderLocation);
+										}).then(function(){
+											delete sessionStorage.lastFile;
+											window.location.hash = "";
+											window.location.reload();
+										})	
+									}
+								};
+							});
+						}
+					});
+				that.commandService.addCommand(openRecentCommand);
+			});
+			}
 		},
 		_createEncodingCommand: function() {
 			var that = this;
@@ -13003,6 +13198,12 @@ define('orion/editorCommands',[
 						}
 					}
 					if(parsedParam){
+						//If the incoming resource does not match the current inputManager's, we should ignore it.
+						//This could happen when clicking on a file and then clicking on another in the global search result page.
+						var fileMetadata = (this.inputManager || that.inputManager).getFileMetadata();
+						if(!fileMetadata || parsedParam.resource !== fileMetadata.Location) {
+							return;
+						}
 						textSearcher.setOptions({regex: parsedParam.regEx, caseInsensitive: !parsedParam.caseSensitive, wholeWord: parsedParam.wholeWord});
 						var tempOptions = {};
 						if(parsedParam.atLine){
@@ -13272,9 +13473,9 @@ define('orion/editorCommands',[
 							options1.done = processEditorResult;
 							options1.status = handleStatus;
 							createDelegatedUI(options1);
-						} else if (result && result.searchParams && result.refResult) {
+						} else if (result && result.searchParams) {
 							if(that.sideBar) {
-								that.sideBar.fillSearchPane(result.searchParams.keyword, {Location: result.searchParams.resource}, result);
+								that.sideBar.fillSearchPane(result.searchParams, result.refResult ? result : null);
 							}
 						} else if (result && (result.Status || result.status)) {
 							handleStatus(result.Status || result.status);
@@ -13322,6 +13523,28 @@ define('orion/editorCommands',[
 	exports.handleStatusMessage = handleStatusMessage;
 
 	return exports;
+});
+
+/*******************************************************************************
+ * @license
+ * Copyright (c) 2009, 2012 IBM Corporation and others.
+ * All rights reserved. This program and the accompanying materials are made 
+ * available under the terms of the Eclipse Public License v1.0 
+ * (http://www.eclipse.org/legal/epl-v10.html), and the Eclipse Distribution 
+ * License v1.0 (http://www.eclipse.org/org/documents/edl-v10.html). 
+ *
+ * Contributors: IBM Corporation - initial API and implementation
+ *******************************************************************************/
+/*eslint-env browser, amd*/
+define('embeddedEditor/helper/memoryFileSysConst',[
+], function() {
+	var inMemoryFilePattern = "/in_memory_fs/";
+	var project = "/in_memory_fs/project/";
+	//return module exports
+	return {
+		MEMORY_FILE_PATTERN: inMemoryFilePattern,
+		MEMORY_FILE_PROJECT_PATTERN: project
+	};
 });
 
 /*******************************************************************************
@@ -13561,11 +13784,11 @@ define("orion/encoding-shim", function(){});
 
 /*eslint-env browser, amd*/
 /*global URL*/
-define('embeddedEditor/helper/embeddedFileImpl',["orion/Deferred", "orion/encoding-shim", "orion/URL-shim"], function(Deferred) {
-	
+define('embeddedEditor/helper/embeddedFileImpl',["orion/Deferred", 'embeddedEditor/helper/memoryFileSysConst', "orion/encoding-shim", "orion/URL-shim"], function(Deferred, memoryFileSysConst) {
 	function EmbeddedFileImpl(fileBase) {
 		this.fileBase = fileBase;
 		this.fileRoot = {};
+		this.fileRoot[memoryFileSysConst.MEMORY_FILE_PROJECT_PATTERN] = {Location: memoryFileSysConst.MEMORY_FILE_PROJECT_PATTERN, Directory: true};
 	}
 	
 	EmbeddedFileImpl.prototype = {
@@ -13584,8 +13807,10 @@ define('embeddedEditor/helper/embeddedFileImpl',["orion/Deferred", "orion/encodi
 		createFolder: function(/*parentLocation, folderName*/) {
 			throw new Error("Not supported"); //$NON-NLS-0$ 
 		},
-		createFile: function(/*parentLocation, fileName*/) {
-			throw new Error("Not supported"); //$NON-NLS-0$ 
+		createFile: function(parentLocation, fileName) {
+			var fileLocation = parentLocation + fileName;
+			this._getFile(fileLocation, true);
+			return this.read(fileLocation, true);
 		},
 		moveFile: function(/*sourceLocation, targetLocation, name*/) {
 			throw new Error("Not supported"); //$NON-NLS-0$ 
@@ -13608,7 +13833,7 @@ define('embeddedEditor/helper/embeddedFileImpl',["orion/Deferred", "orion/encodi
 		_getFile: function(fLocation, create) {
 			var locationURL = new URL(fLocation);
 			var filePath = locationURL.pathname;
-			if (!this.fileRoot[filePath] && create) {
+			if (this.fileRoot[filePath] === undefined && create) {
 				this.fileRoot[filePath] = {
 					Name: locationURL.pathname.split("/").pop(),
 					Location: filePath,
@@ -13628,8 +13853,11 @@ define('embeddedEditor/helper/embeddedFileImpl',["orion/Deferred", "orion/encodi
 		 */
 		read: function(fLocation, isMetadata) {
 			var file = this._getFile(fLocation);
-			if (!file) return new Deferred().reject();
+			if (file === undefined) {
+				return new Deferred().resolve(isMetadata ? {} : "");
+			} 
 			if(isMetadata){
+				var parents = fLocation === memoryFileSysConst.MEMORY_FILE_PROJECT_PATTERN ? [] : [this.fileRoot[memoryFileSysConst.MEMORY_FILE_PROJECT_PATTERN]];
 				var meta = {
 					Length: file.length,
 					Directory: !!file.Directory,
@@ -13637,7 +13865,7 @@ define('embeddedEditor/helper/embeddedFileImpl',["orion/Deferred", "orion/encodi
 					ETag: file.ETag,
 					Location: file.Location,
 					Name: file.Name,
-					Parents: []
+					Parents: parents
 				};
 				return new Deferred().resolve(meta);
 			}
@@ -13658,7 +13886,7 @@ define('embeddedEditor/helper/embeddedFileImpl',["orion/Deferred", "orion/encodi
 				file.LocalTimeStamp = Date.now();
 				file.contents = contents;
 			}
-			return new Deferred().resolve(contents);
+			return this.read(fLocation, true);
 		},
 		/**
 		 * Deletes a file, directory, or project.
@@ -15025,24 +15253,24 @@ define('orion/pluginregistry',["orion/Deferred", "orion/EventTarget", "orion/URL
 
             if (configuration.plugins) {
                 Object.keys(configuration.plugins).forEach(function(url) {
-                    url = _normalizeURL(url);
-                    //                    if (!httpOrHttps.test(url)) {
-                    //                        console.log("Illegal Plugin URL: " + url);
-                    //                        return;
-                    //                    }
-                    var plugin = this.getPlugin(url);
-                    if (!plugin) {
-                        var manifest = configuration.plugins[url];
-                        if (typeof manifest !== "object") {
-                        	manifest = internalRegistry.getPersisted(url) || {};
-                        }
-                        manifest.autostart = manifest.autostart || configuration.defaultAutostart || "lazy";
-                        plugin = new Plugin(url, manifest, internalRegistry);
-                        plugin._default = true;
-                        _plugins.push(plugin);
-                    } else {
-                        plugin._default = true;
-                    }
+		            url = _normalizeURL(url);
+		            //                    if (!httpOrHttps.test(url)) {
+		            //                        console.log("Illegal Plugin URL: " + url);
+		            //                        return;
+		            //                    }
+		            var plugin = this.getPlugin(url);
+		            if (!plugin) {
+		                var manifest = configuration.plugins[url];
+		                if (typeof manifest !== "object") {
+		                	manifest = internalRegistry.getPersisted(url) || {};
+		                }
+		                manifest.autostart = manifest.autostart || configuration.defaultAutostart || "lazy";
+		                plugin = new Plugin(url, manifest, internalRegistry);
+		                plugin._default = true;
+		                _plugins.push(plugin);
+		            } else {
+		                plugin._default = true;
+		            }
                 }.bind(this));
             }
             _plugins.sort(function(a, b) {
@@ -15264,17 +15492,19 @@ if (_all_script && _all_script.length && _all_script.length > 0) {
 }
 define('embeddedEditor/helper/bootstrap',[
 	'embeddedEditor/helper/embeddedFileImpl',
+	'embeddedEditor/helper/memoryFileSysConst',
 	'orion/pluginregistry',
 	'orion/Deferred',
 	'orion/URL-shim'
 ], function(
 	EmbeddedFileImpl,
+	memoryFileSysConst,
 	mPluginRegistry,
 	Deferred
 ) {
 
 	var once; // Deferred
-	var fPattern = "/__embed/";
+	var inMemoryFilePattern = memoryFileSysConst.MEMORY_FILE_PATTERN;
 	var defaultPluginURLs = [
 		"../javascript/plugins/javascriptPlugin.html",
 		"../webtools/plugins/webToolsPlugin.html",
@@ -15309,11 +15539,11 @@ define('embeddedEditor/helper/bootstrap',[
 		}
 		
 		once = new Deferred();
-		var fService = new EmbeddedFileImpl(fPattern);
+		var fService = new EmbeddedFileImpl(inMemoryFilePattern);
 		serviceRegistry.registerService("orion.core.file", fService, {
 			Name: 'Embedded File System',
-			top: fPattern,
-			pattern: fPattern
+			top: inMemoryFilePattern,
+			pattern: inMemoryFilePattern
 		});
 		var plugins = {};
 		pluginsToLoad.forEach(function(pluginURLString){
@@ -16671,6 +16901,25 @@ define('orion/inputManager',[
 		this.contentTypeRegistry = options.contentTypeRegistry;
 		this.selection = options.selection;
 		this._input = this._title = "";
+		if (this.fileClient) {
+			this.fileClient.addEventListener("Changed", function(evt) { //$NON-NLS-0$
+				if (this._fileMetadata && this._fileMetadata._saving) {
+					return;
+				}
+				if(evt && evt.modified) {
+					var metadata = this.getFileMetadata();
+					if(metadata && metadata.Location) {
+						if(evt.modified.some(function(loc){
+							return metadata.Location === loc;
+						})) {
+							//We do not want to set focus on this editor. 
+							//E.g., If a user works on editor A but quick fix could have modified editor B. We should update B's contents but user still want to work on A.
+							this.load(null, true);
+						}
+					}
+				}
+			}.bind(this));
+		}
 	}
 	objects.mixin(InputManager.prototype, /** @lends orion.editor.InputManager.prototype */ {
 		/**
@@ -16713,7 +16962,7 @@ define('orion/inputManager',[
 			}
 			return false;
 		},
-		load: function(charset) {
+		load: function(charset, nofocus) {
 			var fileURI = this.getInput();
 			if (!fileURI) { return; }
 			var fileClient = this.fileClient;
@@ -16732,7 +16981,7 @@ define('orion/inputManager',[
 							this._fileMetadata = objects.mixin(this._fileMetadata, data);
 							if (!editor.isDirty() || window.confirm(messages.loadOutOfSync)) {
 								progress(fileClient.read(resource), messages.Reading, fileURI).then(function(contents) {
-									editor.setInput(fileURI, null, contents);
+									editor.setInput(fileURI, null, contents, null, nofocus);
 									this._clearUnsavedChanges();
 								}.bind(this));
 							}
@@ -17894,7 +18143,172 @@ define("orion/editor/util", [], function() { //$NON-NLS-0$
 });
 /*******************************************************************************
  * @license
- * Copyright (c) 2010, 2015 IBM Corporation and others.
+ * Copyright (c) 2011, 2013 IBM Corporation and others.
+ * All rights reserved. This program and the accompanying materials are made 
+ * available under the terms of the Eclipse Public License v1.0 
+ * (http://www.eclipse.org/legal/epl-v10.html), and the Eclipse Distribution 
+ * License v1.0 (http://www.eclipse.org/org/documents/edl-v10.html). 
+ *
+ *******************************************************************************/
+define ('orion/bidiUtils',[     	
+    	'orion/util'
+        ], 
+		function(util) { /* BDL */
+	
+	function setBrowserLangDirection() {
+		
+		var lang;
+    	if (window.dojoConfig) {
+      		lang = window.dojoConfig.locale;
+    	}
+    	if (!lang) {
+      		lang = navigator.languages ? navigator.languages[0] : (navigator.language || navigator.userLanguage);
+    	}
+    	var isBidi = lang && 'ar iw he'.indexOf((lang).substring(0, 2)) != - 1;
+		
+    	if (isBidi)
+    	{
+	    	var htmlElement = document.getElementsByTagName('html')[0];
+	    	if (htmlElement){ //should be always true
+	    		htmlElement.setAttribute ("dir", "rtl");
+	    	}
+    	}	
+	};
+	
+	setBrowserLangDirection();
+	
+	var bidiEnabledStorgae = '/orion/preferences/bidi/bidiEnabled'; //$NON-NLS-0$
+	var bidiLayoutStorage = '/orion/preferences/bidi/bidiLayout'; //$NON-NLS-0$	
+	var LRE = '\u202A';	//$NON-NLS-0$
+	var PDF = '\u202C'; //$NON-NLS-0$
+	var RLE = '\u202B'; //$NON-NLS-0$
+	
+	var isBidiEnabled = bidiEnabled();
+	var bidiLayout = getBidiLayout();
+
+	/**
+	 * checks if directionality should be applied in Orion.
+	 * @returns {Boolean} true if globalization settings exist and bidi is enabled.
+	 */		
+	function bidiEnabled() {
+		var bidiEnabled = localStorage.getItem(bidiEnabledStorgae);
+		if (bidiEnabled && bidiEnabled == 'true') {		//$NON-NLS-0$
+			return true;
+		}
+		else {
+			return false;
+		}
+	};
+	
+	/**
+	 * returns bidiLayout value set in globalization settings.
+	 * @returns {String} text direction.
+	 */	
+	function getBidiLayout() {
+		var bidiLayout = localStorage.getItem(bidiLayoutStorage);
+		if (bidiLayout && (bidiLayout == 'rtl' || bidiLayout == 'ltr' || bidiLayout == 'auto')) {	//$NON-NLS-0$ //$NON-NLS-1$ //$NON-NLS-2$
+			return bidiLayout;
+		}
+		else {
+			return 'ltr';	//$NON-NLS-0$
+		}
+	};
+	
+	/**
+	 * returns text direction.
+	 * this method is used for handling direction by adding a dir attribute in an HTML element.
+	 * if bidiLayout is set to ltr > return ltr
+	 * if bidiLayout is set to rtl > return rtl
+	 * if bidiLayout is set to auto > check for first strong character in text and return ltr or rtl accordingly.
+	 * @param {String} the text on which to set directionality
+	 * @returns {String} text direction. rtl or ltr.
+	 */	
+	function getTextDirection(text) {
+		bidiLayout = getBidiLayout();
+		if (!bidiEnabled()) {
+			return "";
+		}
+		if (bidiLayout == 'auto' && util.isIE) {	//$NON-NLS-0$
+			return checkContextual(text);
+		}
+		else {
+			return bidiLayout;
+		}
+	};	
+	
+	/**
+	 * Wraps text by UCC (Unicode control characters) according to text direction
+	 * In some cases defining the dir attribute in a different direction than the GUI orientation, 
+	 * changes the alignment of the text and/or adjacent elements such as icons.
+	 * This doesn't follow the bidi standards (static text should be aligned following GUI direction).
+	 * Therefore the only solution is to use UCC (Unicode control characters) to display the text in a correct orientation.
+	 * (the text is changed for display purposes only. The original text in the repository remains unchanged)
+	 * @param {String} the text to be wrapped
+	 * @returns {String} text after adding ucc characters.
+	 */		
+	function enforceTextDirWithUcc ( text ) {
+		if (bidiEnabled() && text.trim()) {
+			bidiLayout = getBidiLayout();
+			var dir = bidiLayout == 'auto' ? checkContextual( text ) : bidiLayout;	//$NON-NLS-0$
+			return ( dir == 'ltr' ? LRE : RLE ) + text + PDF;	//$NON-NLS-0$
+		}
+		else {
+			return text;	
+		}
+	};
+	
+	/**
+	 * Finds the first strong (directional) character.
+	 * If it is Latin, return ltr. If it is bidi, return rtl. Otherwise, return ltr as default. 
+	 * @param {String} the text to be examined
+	 * @returns {String} text direction. rtl or ltr.
+	 */			
+	function checkContextual ( text ) {
+		// look for strong (directional) characters
+		var fdc = /[A-Za-z\u05d0-\u065f\u066a-\u06ef\u06fa-\u07ff\ufb1d-\ufdff\ufe70-\ufefc]/.exec( text );
+		// if found, return the direction that defined by the character, else return ltr as defult.
+		return fdc ? ( fdc[0] <= 'z' ? 'ltr' : 'rtl' ) : 'ltr';	//$NON-NLS-0$ //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+	};
+	
+	function addBidiEventListeners ( input ) {
+		if (!input._hasBidiEventListeners) {
+			input._hasBidiEventListeners = true;
+
+			var eventTypes = ['keyup', 'cut', 'paste'];
+			for (var i = 0; i < eventTypes.length; ++i) {
+				input.addEventListener(eventTypes[i], handleInputEvent.bind(this),
+					false);
+			}
+		}
+	};
+	
+	function handleInputEvent ( event ) {
+		var input = event.target;
+		if (input) {
+			input.dir = getTextDirection(input.value || input.textContent); // resolve dir attribute of the element
+		}
+	};
+	
+	function initInputField ( input ) {
+		if (bidiEnabled() && input) {
+			input.dir = getTextDirection(input.value || input.textContent); // resolve dir attribute of the element
+
+			if (util.isIE) {
+				addBidiEventListeners(input);
+			}
+		}
+	};
+		
+	return {
+		bidiEnabled: bidiEnabled,
+		getTextDirection: getTextDirection,		
+		enforceTextDirWithUcc: enforceTextDirWithUcc,
+		initInputField: initInputField
+	};
+});
+/*******************************************************************************
+ * @license
+ * Copyright (c) 2010, 2016 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials are made 
  * available under the terms of the Eclipse Public License v1.0 
  * (http://www.eclipse.org/legal/epl-v10.html), and the Eclipse Distribution 
@@ -17915,8 +18329,9 @@ define("orion/editor/textView", [  //$NON-NLS-1$
 	'orion/editor/textTheme', //$NON-NLS-1$
 	'orion/editor/util', //$NON-NLS-1$
 	'orion/util', //$NON-NLS-1$
+	'orion/bidiUtils', //$NON-NLS-1$
 	'orion/metrics' //$NON-NLS-1$
-], function(messages, mTextModel, mKeyModes, mEventTarget, mTextTheme, textUtil, util, mMetrics) {
+], function(messages, mTextModel, mKeyModes, mEventTarget, mTextTheme, textUtil, util, bidiUtils, mMetrics) {
 
 	/** @private */
 	function getWindow(doc) {
@@ -18745,12 +19160,17 @@ define("orion/editor/textView", [  //$NON-NLS-1$
 		_createRange: function(text, start, end, style, data) {
 			if (start > end) { return; }
 			var tabSize = this.view._customTabSize, range;
+			var bidiStyle = {tagName:"span", bidi:true, style:{unicodeBidi:"embed", direction:"ltr"}};
+			var bidiRange = {text: "\u200E", style: bidiStyle}; // We ensure segments flow from left to right by adding a LRM marker \u200E
 			if (tabSize && tabSize !== 8) {
 				var tabIndex = text.indexOf("\t", start); //$NON-NLS-1$
 				while (tabIndex !== -1 && tabIndex < end) {
 					if (start < tabIndex) {
 						range = {text: text.substring(start, tabIndex), style: style};
 						data.ranges.push(range);
+						if (bidiUtils.isBidiEnabled) {
+							data.ranges.push(bidiRange);
+						}
 						data.tabOffset += range.text.length;
 					}
 					var spacesCount = tabSize - (data.tabOffset % tabSize);
@@ -18762,6 +19182,9 @@ define("orion/editor/textView", [  //$NON-NLS-1$
 						}
 						range = {text: spaces, style: style, ignoreChars: spacesCount - 1};
 						data.ranges.push(range);
+						if (bidiUtils.isBidiEnabled) {
+							data.ranges.push(bidiRange);
+						}
 						data.tabOffset += range.text.length;
 					}
 					start = tabIndex + 1;
@@ -18774,6 +19197,9 @@ define("orion/editor/textView", [  //$NON-NLS-1$
 			if (start <= end) {
 				range = {text: text.substring(start, end), style: style};
 				data.ranges.push(range);
+				if (bidiUtils.isBidiEnabled) {
+					data.ranges.push(bidiRange);
+				}
 				data.tabOffset += range.text.length;
 			}
 		},
@@ -18796,6 +19222,8 @@ define("orion/editor/textView", [  //$NON-NLS-1$
 				child.ignore = true;
 			} else if (style && style.node) {
 				child.appendChild(style.node);
+				child.ignore = true;
+			} else if (style && style.bidi) {				
 				child.ignore = true;
 			}
 			applyStyle(style, child);
@@ -23225,7 +23653,7 @@ define("orion/editor/textView", [  //$NON-NLS-1$
 			return true;
 		},
 		_doTabMode: function () {
-			this._tabMode = !this._tabMode;
+			this.setOptions({tabMode: !this.getOptions("tabMode")}); //$NON-NLS-1$
 			return true;
 		},
 		_doWrapMode: function () {
@@ -23761,6 +24189,7 @@ define("orion/editor/textView", [  //$NON-NLS-1$
 			this._setTabSize(this._tabSize, true);
 			this._setMarginOffset(this._marginOffset, true);
 			this._hookEvents();
+			bidiUtils.initInputField(clientDiv);
 			var rulers = this._rulers;
 			for (var i=0; i<rulers.length; i++) {
 				this._createRuler(rulers[i]);
@@ -23978,13 +24407,16 @@ define("orion/editor/textView", [  //$NON-NLS-1$
 				clipboardData = evt.clipboardData;
 			}
 			function convert(wholeText) {
-				var clipboadText = [];
-				convertDelimiter(wholeText, function(t) {clipboadText.push(t);}, null);
-				if (handler) { handler(clipboadText); }
-				return clipboadText;
+				var clipboardText = [];
+				convertDelimiter(wholeText, function(t) {clipboardText.push(t);}, null);
+				if (handler) { handler(clipboardText); }
+				return clipboardText;
 			}
 			if (clipboardData) {
 				return convert(clipboardData.getData(util.isIE ? "Text" : "text/plain")); //$NON-NLS-1$"//$NON-NLS-2$
+			}
+			if (util.isElectron && !evt) {
+				return convert(window.__clipboardModule.readText());
 			}
 			if (util.isFirefox) {
 				this._ignoreFocus = true;
@@ -24774,7 +25206,7 @@ define("orion/editor/textView", [  //$NON-NLS-1$
 					return false;
 				}
 			}
-			/* no event and no permission, copy can not be done */
+			/* no event and no permission, copy cannot be done */
 			cleanup();
 			return true;
 		},
@@ -28950,20 +29382,22 @@ define('orion/editor/findUI',[
 			root.className = "textViewFind"; //$NON-NLS-0$
 			textUtil.addEventListener(root, "keydown", function(e) { that._handleKeyDown(e); }); //$NON-NLS-0$
 			this._rootDiv = root;
+			root.setAttribute("role", "dialog");
+			root.setAttribute("aria-label", messages.findReplace);
 			this._createContents(document, root);
 			view._rootDiv.insertBefore(root, view._rootDiv.firstChild);
 		},
 		_createContents: function(document, parent) {
 			var that = this;
-			var fintInput = util.createElement(document, 'input'); //$NON-NLS-0$
-			fintInput.className = "textViewFindInput"; //$NON-NLS-0$
-			this._findInput = fintInput;
-			fintInput.type = "text"; //$NON-NLS-0$
-			fintInput.placeholder = messages.findWith;
-			textUtil.addEventListener(fintInput, "input", function(evt) { //$NON-NLS-0$
+			var findInput = util.createElement(document, 'input'); //$NON-NLS-0$
+			findInput.className = "textViewFindInput"; //$NON-NLS-0$
+			this._findInput = findInput;
+			findInput.type = "text"; //$NON-NLS-0$
+			findInput.placeholder = messages.findWith;
+			textUtil.addEventListener(findInput, "input", function(evt) { //$NON-NLS-0$
 				return that._handleInput(evt);
 			});
-			parent.appendChild(fintInput);
+			parent.appendChild(findInput);
 
 			var group = util.createElement(document, 'span'); //$NON-NLS-0$
 			that._createButton(document, group, messages.next, function() { that.find(true); });
@@ -28986,16 +29420,17 @@ define('orion/editor/findUI',[
 			}
 
 			group = util.createElement(document, 'span'); //$NON-NLS-0$
-			that._createButton(document, group, messages.regex, function(evt) { that._toggle("regex", evt.target); }, this._regex, messages.regexTooltip); //$NON-NLS-0$
-			that._createButton(document, group, messages.caseInsensitive, function(evt) { that._toggle("caseInsensitive", evt.target); }, this._caseInsensitive, messages.caseInsensitiveTooltip); //$NON-NLS-0$
-			that._createButton(document, group, messages.wholeWord, function(evt) { that._toggle("wholeWord", evt.target); }, this._wholeWord, messages.wholeWordTooltip); //$NON-NLS-0$
+			that._createButton(document, group, messages.regex, function(evt) { that._toggle("regex", evt.target); }, this._regex, messages.regexTooltip, messages.regexTooltip); //$NON-NLS-0$
+			that._createButton(document, group, messages.caseInsensitive, function(evt) { that._toggle("caseInsensitive", evt.target); }, this._caseInsensitive, messages.caseInsensitiveTooltip, messages.caseInsensitiveTooltip); //$NON-NLS-0$
+			that._createButton(document, group, messages.wholeWord, function(evt) { that._toggle("wholeWord", evt.target); }, this._wholeWord, messages.wholeWordTooltip, messages.wholeWordTooltip); //$NON-NLS-0$
 			parent.appendChild(group);
 
 			var close = that._createButton(document, parent, "", function() { that.hide(); }); //$NON-NLS-0$
 			close.className = "textViewFindCloseButton"; //$NON-NLS-0$
 			close.title = messages.closeTooltip;
+			util.confineDialogTab(findInput, close);
 		},
-		_createButton: function(document, parent, text, callback, checked, tooltip) {
+		_createButton: function(document, parentDom, text, callback, checked, tooltip, ariaLabel) {
 			var button  = document.createElement("button"); //$NON-NLS-0$
 			button.type = "button"; //$NON-NLS-0$
 			this._checked(checked, button);
@@ -29004,7 +29439,10 @@ define('orion/editor/findUI',[
 			if (text) {
 				button.appendChild(document.createTextNode(text)); //$NON-NLS-0$
 			}
-			parent.appendChild(button);
+			if (ariaLabel) {
+				button.setAttribute("aria-label", ariaLabel);
+			}
+			parentDom.appendChild(button);
 			return button;
 		},
 		_toggle: function(prop, button) {
@@ -33821,7 +34259,7 @@ if (typeof exports === 'object') {
 /*eslint-env browser, amd*/
 
 define ('orion/hover',[
-	'marked/marked' //$NON-NLS-0$
+	'marked/marked'
 ], function(Markdown) {
 
 	function Hover(editor, hoverFactory) {
@@ -33867,15 +34305,17 @@ define ('orion/hover',[
 				return;
 			}
 			
-			var actionsDiv = document.createElement("div"); //$NON-NLS-0$
-			actionsDiv.className = "commandList"; //$NON-NLS-0$ 
+			var actionsDiv = document.createElement("div");
+			actionsDiv.classList.add("commandList"); //$NON-NLS-0$ 
 			parentDiv.appendChild(actionsDiv);
 			
 			var nodeList = [];
 			var metadata = this.inputManager.getFileMetadata();
-			metadata.annotation = annotation;
-			this.commandRegistry.renderCommands("orion.edit.quickfix", actionsDiv, metadata, this.editor, 'quickfix', annotation, nodeList); //$NON-NLS-1$ //$NON-NLS-2$
-			delete metadata.annotation;
+			if (metadata){
+				metadata.annotation = annotation;
+				this.commandRegistry.renderCommands("orion.edit.quickfix", actionsDiv, metadata, this.editor, 'quickfix', annotation, nodeList); //$NON-NLS-1$ //$NON-NLS-2$
+				delete metadata.annotation;
+			}
 		}
 
 	};
@@ -33889,7 +34329,7 @@ define ('orion/hover',[
 		this.filterHoverPlugins();
 
 		// Track changes to the input type and re-filter
-		this.inputManager.addEventListener("InputChanged", function() { //$NON-NLS-0$
+		this.inputManager.addEventListener("InputChanged", function() {
 			this.filterHoverPlugins();
 		}.bind(this));
 	}
@@ -34269,30 +34709,70 @@ define("orion/editor/contentAssist", [ //$NON-NLS-0$
 			var indentation = line.substring(0, index);
 			var options = textView.getOptions("tabSize", "expandTab"); //$NON-NLS-1$ //$NON-NLS-0$
 			var tab = options.expandTab ? new Array(options.tabSize + 1).join(" ") : "\t"; //$NON-NLS-1$ //$NON-NLS-0$
-			var params = {
-				line: line,
-				offset: mapOffset,
-				prefix: model.getText(this.getPrefixStart(model, mapOffset), mapOffset),
-				selection: sel,
-				delimiter: model.getLineDelimiter(),
-				tab: tab,
-				indentation: indentation
-			};
-			var self = this;
+			var lineDelimiter = model.getLineDelimiter();
+			var _self = this;
 			var promises = providerInfoArray.map(function(providerInfo) {
 				var provider = providerInfo.provider;
+				var computePrefixFunc = provider.computePrefix;
+				var ecProvider;
+				var editorContext;
 				var proposals;
+				var func;
+				var promise;
+				var params;
+				if (computePrefixFunc) {
+					ecProvider = _self.editorContextProvider;
+					editorContext = ecProvider.getEditorContext();
+					var result = computePrefixFunc.apply(provider, [editorContext, mapOffset]);
+					return result.then(function(prefix) {
+						params = {
+							line: line,
+							offset: mapOffset,
+							prefix: prefix,
+							selection: sel,
+							delimiter: lineDelimiter,
+							tab: tab,
+							indentation: indentation
+						};
+						try {
+							if ((func = provider.computeContentAssist)) {
+								params = objects.mixin(params, ecProvider.getOptions());
+								promise = func.apply(provider, [editorContext, params]);
+							} else if ((func = provider.getProposals || provider.computeProposals)) {
+								// old API
+								promise = func.apply(provider, [model.getText(), mapOffset, params]);
+							}
+							proposals = _self.progress ? _self.progress.progress(promise, "Generating content assist proposal") : promise; //$NON-NLS-0$
+						} catch (e) {
+							return new Deferred().reject(e);
+						}
+						return Deferred.when(proposals);
+					},
+					function(err) {
+						return new Deferred().reject(err);
+					});
+				}
+				// no computePrefix function is defined for the provider. Use the default prefix
+				params = {
+					line: line,
+					offset: mapOffset,
+					prefix: model.getText(_self.getPrefixStart(model, mapOffset), mapOffset),
+					selection: sel,
+					delimiter: lineDelimiter,
+					tab: tab,
+					indentation: indentation
+				};
 				try {
-					var func, promise;
 					if ((func = provider.computeContentAssist)) {
-						var ecProvider = self.editorContextProvider, editorContext = ecProvider.getEditorContext();
+						ecProvider = _self.editorContextProvider;
+						editorContext = ecProvider.getEditorContext();
 						params = objects.mixin(params, ecProvider.getOptions());
 						promise = func.apply(provider, [editorContext, params]);
 					} else if ((func = provider.getProposals || provider.computeProposals)) {
 						// old API
 						promise = func.apply(provider, [model.getText(), mapOffset, params]);
 					}
-					proposals = self.progress ? self.progress.progress(promise, "Generating content assist proposal") : promise; //$NON-NLS-0$
+					proposals = _self.progress ? _self.progress.progress(promise, "Generating content assist proposal") : promise; //$NON-NLS-0$
 				} catch (e) {
 					return new Deferred().reject(e);
 				}
@@ -34304,7 +34784,7 @@ define("orion/editor/contentAssist", [ //$NON-NLS-0$
 			
 			if (this.pageMessage){
 				allPromises = Deferred.when(allPromises, function(proposals){
-					self.pageMessage.close();					
+					_self.pageMessage.close();
 					var foundProposal = false;
 					if (proposals && proposals.length > 0){
 						for (var i=0; i<proposals.length; i++) {
@@ -34315,13 +34795,12 @@ define("orion/editor/contentAssist", [ //$NON-NLS-0$
 						}
 					}
 					if (!foundProposal){
-						self.pageMessage.setErrorMessage(messages["noProposals"]);
+						_self.pageMessage.setErrorMessage(messages["noProposals"]);
 					}
 					return proposals;
 				});
-				self.pageMessage.showWhile(allPromises, messages["computingProposals"]);
+				this.pageMessage.showWhile(allPromises, messages["computingProposals"]);
 			}
-			
 			return allPromises;
 		},
 
@@ -34339,16 +34818,22 @@ define("orion/editor/contentAssist", [ //$NON-NLS-0$
 				this._computedProposals.forEach(function(proposalArray) {
 					if (proposalArray && Array.isArray(proposalArray)) {
 						var includedProposals = proposalArray.filter(function(proposal) {
+							function getRegexp(prefix, filter) {
+								var modifiedFilter = filter.replace(/([.+^=!:${}()|\[\]\/\\])/g, "\\$1"); //add start of line character and escape all special characters except * and ? //$NON-NLS-1$ //$NON-NLS-0$
+								modifiedFilter = modifiedFilter.replace(/([*?])/g, ".$1"); //convert user input * and ? to .* and .? //$NON-NLS-0$
+								return new RegExp("^" + prefix + modifiedFilter, "i");
+							}
+							var pattern;
 							if (!proposal) {
 								return false;
 							}
 							if(typeof proposal.prefix === 'string') {
-							    prefixText = proposal.prefix;
+								prefixText = proposal.prefix;
 							} else {
-							    prefixText = defaultPrefix;
+								prefixText = defaultPrefix;
 							}
-							if ((STYLES[proposal.style] === STYLES.hr)
-								|| (STYLES[proposal.style] === STYLES.noemphasis_title)) {
+							if (STYLES[proposal.style] === STYLES.hr
+								|| STYLES[proposal.style] === STYLES.noemphasis_title) {
 								return true;
 							}
 							
@@ -34361,31 +34846,32 @@ define("orion/editor/contentAssist", [ //$NON-NLS-0$
 								} else {
 									return false; // unknown format
 								}
-			
-								return (0 === proposalString.indexOf(prefixText + this._filterText));
-								
+								pattern = getRegexp(prefixText, this._filterText);
+								return pattern.test(proposalString);
 							} else if (proposal.name || proposal.proposal) {
 								var activated = false;
 								// try matching name
 								if (proposal.name) {
-									activated = (0 === proposal.name.indexOf(prefixText + this._filterText));	
+									pattern = getRegexp(prefixText, this._filterText);
+									activated = pattern.test(proposal.name);
 								}
 								
 								// try matching proposal text
 								if (!activated && proposal.proposal) {
-									activated = (0 === proposal.proposal.indexOf(this._filterText));
+									pattern = getRegexp("", this._filterText);
+									activated = pattern.test(proposal.proposal);
 								}
 								
 								return activated;
 							} else if (typeof proposal === "string") { //$NON-NLS-0$
-								return 0 === proposal.indexOf(this._filterText);
-							} else {
-								return false;
+								pattern = getRegexp("", this._filterText);
+								return pattern.test(proposal);
 							}
+							return false;
 						}, this);
 						
 						if (includedProposals.length > 0) {
-							proposals.push(includedProposals);	
+							proposals.push(includedProposals);
 						}
 					}
 				}, this);
@@ -40777,7 +41263,7 @@ define('orion/markOccurrences',[
 });
 /*******************************************************************************
  * @license
- * Copyright (c) 2010, 2013 IBM Corporation and others.
+ * Copyright (c) 2010, 2016 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials are made 
  * available under the terms of the Eclipse Public License v1.0 
  * (http://www.eclipse.org/legal/epl-v10.html), and the Eclipse Distribution 
@@ -40789,45 +41275,67 @@ define('orion/markOccurrences',[
 define('orion/syntaxchecker',[
 	'orion/Deferred',
 	'orion/edit/editorContext',
-	'orion/i18nUtil',
-], function(Deferred, EditorContext, i18nUtil) {
+], function(Deferred, EditorContext) {
 
-    function getValidators(registry, contentType, title) {
-		var contentTypeService = registry.getService("orion.core.contentTypeRegistry"); //$NON-NLS-0$
-		function getFilteredValidator(validator, contentType) {
-			var contentTypeIds = validator.getProperty("contentType"); //$NON-NLS-0$
-			return contentTypeService.isSomeExtensionOf(contentType, contentTypeIds).then(function(result) {
-				return result ? validator : null;
-			});
-		}
-		var validators = registry.getServiceReferences("orion.edit.validator"); //$NON-NLS-0$
-		var filteredValidators = [];
-		for (var i=0; i < validators.length; i++) {
-			var serviceReference = validators[i];
-			var pattern = serviceReference.getProperty("pattern"); // backwards compatibility //$NON-NLS-0$
-			if (serviceReference.getProperty("contentType")) { //$NON-NLS-0$
-				filteredValidators.push(getFilteredValidator(serviceReference, contentType));
-			} else if (pattern && new RegExp(pattern).test(title)) {
-				var d = new Deferred();
-				d.resolve(serviceReference);
-				filteredValidators.push(d);
-			}
-		}
-		// Return a promise that gives the validators that aren't null
-		return Deferred.all(filteredValidators, function(error) {return {_error: error}; }).then(
-			function(validators) {
-				var capableValidators = [];
-				for (var i=0; i < validators.length; i++) {
-					var validator = validators[i];
-					if (validator && !validator._error) {
-						capableValidators.push(validator);
-					}
-				}
-				return capableValidators;
-			});
+	function getFilteredValidator(validator, contentType, contentTypeService) {
+		var contentTypeIds = validator.getProperty("contentType"); //$NON-NLS-0$
+		return contentTypeService.isSomeExtensionOf(contentType, contentTypeIds).then(function(result) {
+			return result ? validator : null;
+		});
 	}
 			
-var SyntaxChecker = (function () {
+	function clamp(n, min, max) {
+		n = Math.max(n, min);
+		n = Math.min(n, max);
+		return n;
+	}
+
+    function extractProblems(data) {
+		data = data || {};
+		var problems = data.problems || data.errors || data;
+		return Array.isArray(problems) ? problems : [];
+	}
+
+	function _fixup(problems, model) {
+		for (var i=0; i < problems.length; i++) {
+			var problem = problems[i];
+			
+			problem.description = problem.description || problem.reason;
+			problem.severity = problem.severity || "error"; //$NON-NLS-0$
+			problem.start = typeof problem.start === "number" ? problem.start : problem.character; //$NON-NLS-0$
+
+			// Range check
+			if (typeof problem.line === "number") {//$NON-NLS-0$
+				// start, end are line offsets: 1-based in range [1 .. length+1]
+				var lineLength = model.getLine(problem.line - 1, false).length;
+				problem.start = clamp(problem.start, 1, lineLength);
+				problem.end = typeof problem.end === "number" ? problem.end : -1; //$NON-NLS-0$
+				problem.end = clamp(problem.end, problem.start + 1, lineLength + 1);
+
+				// TODO probably need similar workaround for bug 423482 here
+			} else {
+				// start, end are document offsets (0-based)
+				var charCount = model.getCharCount();
+				problem.start = clamp(problem.start, 0, charCount); // leave room for end
+				problem.end = typeof problem.end === "number" ? problem.end : -1; //$NON-NLS-0$
+				problem.end = clamp(problem.end, problem.start, charCount);
+
+				// Workaround: if problem falls on the empty, last line in the buffer, move it to a valid line.
+				// https://bugs.eclipse.org/bugs/show_bug.cgi?id=423482
+				if (problem.end === charCount && model.getLineCount() > 1 && charCount === model.getLineStart(model.getLineCount() - 1)) {
+					var prevLine = model.getLineCount() - 2, prevLineStart = model.getLineStart(prevLine), prevLineEnd = model.getLineEnd(prevLine);
+					if (prevLineStart === prevLineEnd) {
+						// Empty range on an empty line seems to be OK, if not at EOF
+						problem.start = problem.end = prevLineEnd;
+					} else {
+						problem.start = prevLineEnd - 1;
+						problem.end = prevLineEnd;
+					}
+				}
+			}
+		}
+	}
+	
 	/**
 	 * @name orion.SyntaxChecker
 	 * @class Provides access to validation services registered with the service registry.
@@ -40837,33 +41345,58 @@ var SyntaxChecker = (function () {
 		this.registry = serviceRegistry;
 		this.textModel = model;
 	}
-
-	function clamp(n, min, max) {
-		n = Math.max(n, min);
-		n = Math.min(n, max);
-		return n;
-	}
-
-    
-
-    function extractProblems(data) {
-		data = data || {};
-		var problems = data.problems || data.errors || data;
-		return Array.isArray(problems) ? problems : [];
-	}
-
+	
 	SyntaxChecker.prototype = /** @lends orion.SyntaxChecker.prototype */ {
 		/**
-		 * Looks up applicable validators, calls them to obtain problems, passes problems to the marker service.
+		 * @name initialize
+		 * @description Allows providers that implement this function to pre-initisalize their state, etc, before being called later to actually perform validation
+		 * @function
+		 * @public 
+		 * @param {String} loc The location path to initialize from
+		 * @param {Object} contentType The optional content type
+		 * @since 12.0
 		 */
-		checkSyntax: function (contentType, title, message, contents, editorContext) {
+		initialize: function initialize(loc, contentType) {
+			if(!contentType) {
+				//initialize all of them
+				this.registry.getServiceReferences("orion.edit.validator").forEach(function(ref) {
+					var _v = this.registry.getService(ref);
+					if(_v && typeof _v.initialize === "function") {
+						_v.initialize(loc);
+					}
+				}.bind(this));
+				return;
+			}
+			this.getValidators(loc, contentType).then(function(validators) {
+				if(Array.isArray(validators) && validators.length > 0) {
+					validators.forEach(function(validator) {
+						var _v = this.registry.getService(validator);
+						if(_v && typeof _v.initialize === "function") {
+							_v.initialize(loc, contentType);						
+						}
+					}.bind(this));
+				}
+			}.bind(this));
+		},
+		/**
+		 * @description Looks up applicable validators, calls them to obtain problems, passes problems to the marker service.
+		 * @function 
+		 * @public 
+		 * @param {Object} contentType The content type of the file to check
+		 * @param {String} loc The fully qualified path of the file to check
+		 * @param {String} message The message to display
+		 * @param {String} contents The file contents to check
+		 * @param {Object} editorContext The backing editor content to run with
+		 * @returns {Array.<Object>} The array of problem objects or the empty array
+		 * @see https://wiki.eclipse.org/Orion/Documentation/Developer_Guide/Plugging_into_the_editor#The_Problem_object     
+		 */
+		checkSyntax: function checkSyntax(contentType, loc, message, contents, editorContext) {
 			if (!contentType || message) {
 				return new Deferred().resolve([]);
 			}
 			if (!message) {
 				var serviceRegistry = this.registry;
-				var self = this;
-				return getValidators(serviceRegistry, contentType, title).then(function(validators) {
+				return this.getValidators(loc, contentType).then(function(validators) {
 					if(validators.length === 0) {
 						return new Deferred().resolve();
 					}
@@ -40874,14 +41407,14 @@ var SyntaxChecker = (function () {
 						if (service.computeProblems) {
 							var context = {
 								contentType: contentType.id,
-								title: title
+								title: loc
 							};
 							promise = service.computeProblems(editorContext ? editorContext : EditorContext.getEditorContext(serviceRegistry), context);
 						} else if (service.checkSyntax) {
 							// Old API
-							promise = service.checkSyntax(title, contents);
+							promise = service.checkSyntax(loc, contents);
 						}
-						return progress.progress(promise, "Validating " + title).then(extractProblems);
+						return progress.progress(promise, "Validating " + loc).then(extractProblems);
 					});
 					
 					return Deferred.all(problemPromises, function(error) {return {_error: error}; })
@@ -40890,66 +41423,70 @@ var SyntaxChecker = (function () {
 							for (var i=0; i < results.length; i++) {
 								var probs = results[i];
 								if (!probs._error) {
-									self._fixup(probs);
+									_fixup(probs, this.textModel);
 									problems = problems.concat(probs);
 								}
 							}
 							return new Deferred().resolve(problems);
 							//serviceRegistry.getService("orion.core.marker")._setProblems(problems); //$NON-NLS-0$
-						});
+						}.bind(this));
+				}.bind(this),
+				/* @callback */ function(err) {
+					return new Deferred().resolve([]);
 				});
 			}
 		},
-		
-		setTextModel: function(model) {
+		/**
+		 * @description Allows the text model to be set
+		 * @function
+		 * @public
+		 * @param {editor.TextModel} model The new model to set
+		 */
+		setTextModel: function setTextModel(model) {
 			this.textModel = model;
 		},
-		
-		_fixup: function(problems) {
-    		var model = this.textModel;
-    		for (var i=0; i < problems.length; i++) {
-    			var problem = problems[i];
-    			
-    			problem.description = problem.description || problem.reason;
-    			problem.severity = problem.severity || "error"; //$NON-NLS-0$
-    			problem.start = (typeof problem.start === "number") ? problem.start : problem.character; //$NON-NLS-0$
-    
-    			// Range check
-    			if (typeof problem.line === "number") {//$NON-NLS-0$
-    				// start, end are line offsets: 1-based in range [1 .. length+1]
-    				var lineLength = model.getLine(problem.line - 1, false).length;
-    				problem.start = clamp(problem.start, 1, lineLength);
-    				problem.end = (typeof problem.end === "number") ? problem.end : -1; //$NON-NLS-0$
-    				problem.end = clamp(problem.end, problem.start + 1, lineLength + 1);
-    
-    				// TODO probably need similar workaround for bug 423482 here
-    			} else {
-    				// start, end are document offsets (0-based)
-    				var charCount = model.getCharCount();
-    				problem.start = clamp(problem.start, 0, charCount); // leave room for end
-    				problem.end = (typeof problem.end === "number") ? problem.end : -1; //$NON-NLS-0$
-    				problem.end = clamp(problem.end, problem.start, charCount);
-    
-    				// Workaround: if problem falls on the empty, last line in the buffer, move it to a valid line.
-    				// https://bugs.eclipse.org/bugs/show_bug.cgi?id=423482
-    				if (problem.end === charCount && model.getLineCount() > 1 && charCount === model.getLineStart(model.getLineCount() - 1)) {
-    					var prevLine = model.getLineCount() - 2, prevLineStart = model.getLineStart(prevLine), prevLineEnd = model.getLineEnd(prevLine);
-    					if (prevLineStart === prevLineEnd) {
-    						// Empty range on an empty line seems to be OK, if not at EOF
-    						problem.start = problem.end = prevLineEnd;
-    					} else {
-    						problem.start = prevLineEnd - 1;
-    						problem.end = prevLineEnd;
-    					}
-    				}
-    			}
-    		}
-    	}
+		/**
+		 * @name getValidators
+		 * @description Returns the filtered list of validators that aply to the given location and content type
+		 * @function
+		 * @public
+		 * @param {String} loc The location of the resource
+		 * @param {Object} contentType The content type object
+		 * @returns {Array.<Object>} The array of applicable validators or the empty array
+		 * @since 12.0
+		 */
+		getValidators: function getValidators(loc, contentType) {
+			var contentTypeService = this.registry.getService("orion.core.contentTypeRegistry"); //$NON-NLS-0$
+			var validators = this.registry.getServiceReferences("orion.edit.validator"); //$NON-NLS-0$
+			var filteredValidators = [];
+			for (var i=0; i < validators.length; i++) {
+				var serviceReference = validators[i];
+				var pattern = serviceReference.getProperty("pattern"); // backwards compatibility //$NON-NLS-0$
+				if (serviceReference.getProperty("contentType")) { //$NON-NLS-0$
+					filteredValidators.push(getFilteredValidator(serviceReference, contentType, contentTypeService));
+				} else if (pattern && new RegExp(pattern).test(loc)) {
+					var d = new Deferred();
+					d.resolve(serviceReference);
+					filteredValidators.push(d);
+				}
+			}
+			// Return a promise that gives the validators that aren't null
+			return Deferred.all(filteredValidators, function(error) {return {_error: error}; }).then(
+				function(validators) {
+					var capableValidators = [];
+					for (i=0; i < validators.length; i++) {
+						var validator = validators[i];
+						if (validator && !validator._error) {
+							capableValidators.push(validator);
+						}
+					}
+					return capableValidators;
+				});
+		}
 	};
-	return SyntaxChecker;
-}());
-return {SyntaxChecker: SyntaxChecker,
-		getValidators: getValidators};
+	return {
+		SyntaxChecker: SyntaxChecker
+	};
 });
 
 /******************************************************************************* 
@@ -41895,6 +42432,89 @@ define('orion/webui/contextmenu',[
 });
 /*******************************************************************************
  * @license
+ * Copyright (c) 2013 IBM Corporation and others.
+ * All rights reserved. This program and the accompanying materials are made
+ * available under the terms of the Eclipse Public License v1.0
+ * (http://www.eclipse.org/legal/epl-v10.html), and the Eclipse Distribution
+ * License v1.0 (http://www.eclipse.org/org/documents/edl-v10.html).
+ *
+ * Contributors:  IBM Corporation - initial API and implementation
+ ******************************************************************************/
+/*eslint-env browser, amd*/
+
+define('orion/commonPreferences',[
+	'orion/EventTarget'
+], function(EventTarget) {
+	function mergeSettings(defaults, settings) {
+		for (var property in defaults) {
+			if (!settings.hasOwnProperty(property)) {
+				settings[property] = defaults[property];
+			}
+		}
+		return settings;
+	}
+	
+	function CommonPreferences(preferences, callback) {
+		this._preferences = preferences;
+		EventTarget.attach(this);
+		preferences.addEventListener("changed", function (e) {
+			if (e.namespace === this.getPrefsSection()) {
+				this.dispatchEvent({type: "Changed"}); //$NON-NLS-0$
+			}
+		}.bind(this));
+		if (callback) {
+			this.addEventListener("Changed", function(evt) { //$NON-NLS-0$
+				callback(evt.preferences);
+			});
+		}
+	}
+
+	CommonPreferences.prototype = /** @lends edit.EditorPreferences.prototype */ {
+		_initialize: function(prefs) {
+			var settings = prefs[this.getPrefsKey()] || {};
+			var defaults = this.getDefaults();
+			return mergeSettings(defaults, settings);
+		},
+		getDefaults: function() {
+			return {};
+		},
+		getPrefsSection: function() {
+			return "common/settings"; //$NON-NLS-0$
+		},
+		getPrefsKey: function() {
+			return "commonSettings"; //$NON-NLS-0$
+		},
+		getPrefs: function(callback) {
+			return this._preferences.get(this.getPrefsSection()).then(function(prefs) {
+				var object = this._initialize(prefs);
+				if (typeof object === "string") { //$NON-NLS-0$
+					object = JSON.parse(object);
+				}
+				if (callback) {
+					callback(object);
+				}
+				return object;
+			}.bind(this));
+		},
+		setPrefs: function(object, callback) {
+			var data = {};
+			data[this.getPrefsKey()] = object;
+			this._preferences.put(this.getPrefsSection(), data).then(function() {
+				object = this._initialize(data);
+				if (callback) {
+					callback(object);
+				}
+				this.dispatchEvent({type: "Changed", preferences: object}); //$NON-NLS-0$
+			}.bind(this));
+		}
+	};
+
+	return { CommonPreferences: CommonPreferences,
+			 mergeSettings: mergeSettings};
+});
+
+/*******************************************************************************
+ * @license
  * Copyright (c) 2010, 2016 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials are made
  * available under the terms of the Eclipse Public License v1.0
@@ -41938,6 +42558,8 @@ define('orion/editorView',[
 	'orion/Deferred',
 	'orion/webui/contextmenu',
 	'orion/metrics',
+	'orion/commonPreferences',
+	'embeddedEditor/helper/memoryFileSysConst',
 	'orion/objects'
 ], function(
 	messages,
@@ -41947,9 +42569,9 @@ define('orion/editorView',[
 	mDispatcher, EditorContext, Highlight,
 	mMarkOccurrences, mSyntaxchecker, LiveEditSession,
 	mProblems, mBlamer, mDiffer,
-	mKeyBinding, util, Deferred, mContextMenu, mMetrics, objects
+	mKeyBinding, util, Deferred, mContextMenu, mMetrics, mCommonPreferences, memoryFileSysConst, objects
 ) {
-	var fPattern = "/__embed/"; //$NON-NLS-1$
+	var inMemoryFilePattern = memoryFileSysConst.MEMORY_FILE_PATTERN;
 	var Dispatcher = mDispatcher.Dispatcher;
 
 	function parseNumericParams(input, params) {
@@ -42015,6 +42637,7 @@ define('orion/editorView',[
 			}.bind(this));
 		}
 		this.settings = {};
+		this._editorConfig = options.editorConfig;
 		this._init();
 	}
 	EditorView.prototype = /** @lends orion.EditorView.prototype */ {
@@ -42043,7 +42666,7 @@ define('orion/editorView',[
 			if(cType && cType.extension && cType.extension.length > 0) {
 				fileExt = cType.extension[0];
 			}
-			var currentLocation = fPattern + this.id + "/foo." + fileExt; //$NON-NLS-1$
+			var currentLocation = inMemoryFilePattern + this.id + "/foo." + fileExt; //$NON-NLS-1$
 			var def;
 			var sameFile = currentLocation === this.lastFileLocation;
 			if(sameFile || !this.lastFileLocation) {
@@ -42110,8 +42733,10 @@ define('orion/editorView',[
 			var inputManager = this.inputManager;
 			inputManager.setAutoLoadEnabled(prefs.autoLoad);
 			inputManager.setAutoSaveTimeout(prefs.autoSave ? prefs.autoSaveTimeout : -1);
-			inputManager.setSaveDiffsEnabled(prefs.saveDiffs);
-			this.differ.setEnabled(this.settings.diffService);
+			if(this.differ) {
+				inputManager.setSaveDiffsEnabled(prefs.saveDiffs);
+				this.differ.setEnabled(this.settings.diffService);
+			}
 			this.updateStyler(prefs);
 			var textView = editor.getTextView();
 			if (textView) {
@@ -42157,6 +42782,7 @@ define('orion/editorView',[
 							return sessionStorage.editorViewSection ? JSON.parse(sessionStorage.editorViewSection) : {}; 
 						},
 						apply: function(animate) {
+							if (!metadata.Location) return;
 							var session = this.get();
 							var locationSession = session[metadata.Location];
 							if (locationSession && locationSession.ETag === metadata.ETag) {
@@ -42165,6 +42791,7 @@ define('orion/editorView',[
 							}
 						},
 						save: function() {
+							if (!metadata.Location) return;
 							var session = this.get();
 							session[metadata.Location] = {
 								ETag: metadata.ETag,
@@ -42426,7 +43053,9 @@ define('orion/editorView',[
 					editor.reportStatus(messages.readonly, "error"); //$NON-NLS-0$
 				}
 			}
-
+			this.refreshSyntaxCheck = function() {
+				syntaxCheck(inputManager.getInput());
+			}
 			editor.addEventListener("InputChanged", function(evt) {
 				syntaxCheck(evt.title, evt.message, evt.contents);
 			});
@@ -42455,7 +43084,7 @@ define('orion/editorView',[
 			};
 			contextImpl.syntaxCheck = function(title, message, contents) {
 				syntaxCheck(title, message, contents);
-			}
+			};
 			/**
 			 * @description Opens the given location
 			 * @function
@@ -42487,6 +43116,9 @@ define('orion/editorView',[
 			this.editor.install();
 			if(this.editorPreferences) {
 				this.editorPreferences.getPrefs(this.updateSettings.bind(this));
+			} else if(this._editorConfig) {
+				var prefs = mCommonPreferences.mergeSettings(this._editorConfig, {});
+				this.updateSettings(prefs);
 			}
 			
 			// Create a context menu...
@@ -42575,6 +43207,7 @@ define('embeddedEditor/helper/editorSetup',[
 		this._editorCommands = options.editorCommands;
 		this._progressService = options.progressService;
 		this._toolbarId = options.toolbarId;
+		this._editorConfig = options.editorConfig;
 	}
 	
 	objects.mixin(EditorSetupHelper.prototype, /** @lends orion.editor.EditorSetupHelper.prototype */ {
@@ -42599,7 +43232,8 @@ define('embeddedEditor/helper/editorSetup',[
 		},
 		
 		
-		defaultOptions: function(parentId) {
+		defaultOptions: function(options) {
+			var parentId = options.parent;
 			var model = new mTextModel.TextModel();
 			var id = idCounter.toString();
 			var context = Object.create(null);
@@ -42615,6 +43249,8 @@ define('embeddedEditor/helper/editorSetup',[
 				commandRegistry: this._commandRegistry,
 				contentTypeRegistry: this._contentTypeRegistry,
 				editorCommands: this._editorCommands,
+				editorConfig: this._editorConfig,
+				statusReporter: options.statusReporter,
 				progressService: this._progressService,
 				inputManager: this._inputManager, // fake it
 				fileService: this._fileClient, // fake it
@@ -42633,11 +43269,10 @@ define('embeddedEditor/helper/editorSetup',[
 		
 		createEditor: function(options, startupOptions) {
 			this.createInputManager();
-			this.editorView = new mEditorView.EditorView(this.defaultOptions(options.parent));
+			this.editorView = new mEditorView.EditorView(this.defaultOptions(options));
 			idCounter++;
 			this.editorView.create();
 			this._inputManager.editor = this.editorView.editor;
-			this._inputManager.setAutoSaveTimeout(300);
 			
 			var domNode = lib.node(options.parent);
 			domNode.addEventListener("mousedown", function() { //$NON-NLS-0$
@@ -43065,6 +43700,90 @@ define('orion/serviceregistry',["orion/Deferred", "orion/EventTarget"], function
 });
 /*******************************************************************************
  * @license
+ * Copyright (c) 2013 IBM Corporation and others.
+ * All rights reserved. This program and the accompanying materials are made
+ * available under the terms of the Eclipse Public License v1.0
+ * (http://www.eclipse.org/legal/epl-v10.html), and the Eclipse Distribution
+ * License v1.0 (http://www.eclipse.org/org/documents/edl-v10.html).
+ *
+ * Contributors:  IBM Corporation - initial API and implementation
+ ******************************************************************************/
+/*eslint-env browser, amd*/
+define('orion/defaultEditorPreferences',[
+	'orion/util'
+], function(util) {
+	var defaults = {
+		autoSave: util.isElectron ? false : true,
+		autoSaveVisible: true,
+		autoSaveLocalVisible: true,
+		autoSaveTimeout: 250,
+		autoSaveTimeoutVisible: true,
+		themeVisible: true,
+		themeLocalVisible: true,
+		fontSizeVisible: true,
+		fontSizeLocalVisible: true,
+		autoLoad: true,
+		autoLoadVisible: true,
+		saveDiffs: true,
+		saveDiffsVisible: true,
+		contentAssistAutoTrigger: true,
+		contentAssistAutoTriggerVisible: true,
+		showOccurrences: true,
+		showOccurrencesVisible: true,
+		autoPairParentheses: true,
+		autoPairParenthesesVisible: true,
+		autoPairBraces: true,
+		autoPairBracesVisible: true,
+		autoPairSquareBrackets: true,
+		autoPairSquareBracketsVisible: true,
+		autoPairAngleBrackets: false,
+		autoPairAngleBracketsVisible: true,
+		autoPairQuotations: true,
+		autoPairQuotationsVisible: true,
+		autoCompleteComments: true,
+		autoCompleteCommentsVisible: true,
+		smartIndentation: true,
+		smartIndentationVisible: true,
+		trimTrailingWhiteSpace: false,
+		trimTrailingWhiteSpaceVisible: true,
+		tabSize: 4,
+		tabSizeVisible: true,
+		expandTab: false,
+		expandTabVisible: true,
+		scrollAnimation: true,
+		scrollAnimationVisible: true,
+		scrollAnimationTimeout: 300,
+		scrollAnimationTimeoutVisible: true,
+		annotationRuler: true,
+		annotationRulerVisible: true,
+		lineNumberRuler: true,
+		lineNumberRulerVisible: true,
+		foldingRuler: true,
+		foldingRulerVisible: true,
+		overviewRuler: true,
+		overviewRulerVisible: true,
+		zoomRuler: false,
+		zoomRulerVisible: true,
+		zoomRulerLocalVisible: true,
+		showWhitespaces: false,
+		showWhitespacesVisible: true,
+		wordWrap: false,
+		wordWrapVisible: true,
+		showMargin: false,
+		showMarginVisible: true,
+		marginOffset: 80,
+		marginOffsetVisible: true,
+		keyBindings: "Default",
+		keyBindingsVisible: true,
+		keyBindingsLocalVisible: true,
+		diffService: false,
+		diffServiceVisible: false
+	};
+	return { defaults: defaults };
+});
+
+/*******************************************************************************
+ * @license
  * Copyright (c) 2011, 2012 IBM Corporation and others. All rights reserved. This
  * program and the accompanying materials are made available under the terms of
  * the Eclipse Public License v1.0 (http://www.eclipse.org/legal/epl-v10.html),
@@ -43081,8 +43800,11 @@ define('embeddedEditor/builder/embeddedEditor',[
 	'orion/editorCommands',
 	'embeddedEditor/helper/bootstrap',
 	'embeddedEditor/helper/editorSetup',
+	'embeddedEditor/helper/memoryFileSysConst',
 	'orion/serviceregistry',
 	'orion/Deferred',
+	'orion/commonPreferences',
+	'orion/defaultEditorPreferences',
 	'orion/objects'
 ], function(
 	mCommandRegistry,
@@ -43091,8 +43813,11 @@ define('embeddedEditor/builder/embeddedEditor',[
 	mEditorCommands,
 	mBootstrap,
 	mEditorSetup,
+	memoryFileSysConst,
 	mServiceRegistry, 
 	Deferred,
+	mCommonPreferences,
+	mDefaultEditorPreferences,
 	objects
 ) {
 	function CodeEdit(options) {
@@ -43100,6 +43825,7 @@ define('embeddedEditor/builder/embeddedEditor',[
 		this.contentTypeRegistry = new mContentTypes.ContentTypeRegistry(this.serviceRegistry);
 		this._startupOptions = options;
 		this._toolbarId = options && options.toolbarId ? options.toolbarId : "__code__edit__hidden__toolbar";
+		this.Deferred = Deferred;
 	}
 	var once;
 	objects.mixin(CodeEdit.prototype, {
@@ -43125,6 +43851,8 @@ define('embeddedEditor/builder/embeddedEditor',[
 				toolbarId: this._toolbarId,
 				navToolbarId: this._toolbarId
 			});
+			this._editorConfig = this._startupOptions && this._startupOptions.editorConfig ? this._startupOptions.editorConfig : {};
+			mCommonPreferences.mergeSettings(mDefaultEditorPreferences.defaults, this._editorConfig);
 			this._progressService = {
 				progress: function(deferred/*, operationName, progressMonitor*/){
 					return deferred;
@@ -43151,15 +43879,18 @@ define('embeddedEditor/builder/embeddedEditor',[
 		 * @property {String} [contentType] the type of the content (eg.- application/javascript, text/html, etc.)
 		 */
 		/**
-		 * Creates an editorview instance configured with the given options.
+		 * If options is defined, creates an editorview instance configured with the given options. Otherwise load all the plugins nad initialize the widegt.
 		 * 
 		 * @param {orion.editor.EditOptions} options the editor options.
 		 */
-		create: function(options) {
+		startup: function(options) {
 			return mBootstrap.startup(this.serviceRegistry, this.contentTypeRegistry, this._startupOptions).then(function(core) {
 				var serviceRegistry = core.serviceRegistry;
 				var pluginRegistry = core.pluginRegistry;
 				return this._init(core).then( function () {
+					if(!options) {
+						return new Deferred().resolve(core);
+					}
 					var editorHelper = new mEditorSetup.EditorSetupHelper({
 						serviceRegistry: serviceRegistry,
 						pluginRegistry: pluginRegistry,
@@ -43167,6 +43898,7 @@ define('embeddedEditor/builder/embeddedEditor',[
 						fileClient: this._fileClient,
 						contentTypeRegistry: this.contentTypeRegistry,
 						editorCommands: this._editorCommands,
+						editorConfig: this._editorConfig,
 						progressService: this._progressService,
 						toolbarId: this._toolbarId
 					});
@@ -43174,8 +43906,55 @@ define('embeddedEditor/builder/embeddedEditor',[
 		 		}.bind(this));
 
 			}.bind(this));
+		},
+		/**
+		 * @class This object describes the options for <code>create</code>.
+		 * @name orion.editor.EditOptions
+		 *
+		 * @property {String|DOMElement} parent the parent element for the view, it can be either a DOM element or an ID for a DOM element.
+		 * @property {String} [contents=""] the editor contents.
+		 * @property {String} [contentType] the type of the content (eg.- application/javascript, text/html, etc.)
+		 */
+		/**
+		 * Creates an editorview instance configured with the given options.
+		 * 
+		 * @param {orion.editor.EditOptions} options the editor options.
+		 */
+		create: function(options) {
+			return this.startup(options);
+		},
+		importFiles: function(files2import) {
+			var fileClient = this.serviceRegistry.getService("orion.core.file.client");
+			var promises = [];
+			if(fileClient) {
+				files2import.forEach(function(file) {
+					var promise = fileClient.createFile(file.parentLocation ? file.parentLocation : memoryFileSysConst.MEMORY_FILE_PROJECT_PATTERN, file.name).then(function(result){
+						return fileClient.write(result.Location, file.contents);
+					});
+					promises.push(promise);			
+				});
+			}
+			return Deferred.all(promises);
+		},
+		exportFiles: function(files2export) {
+			var fileClient = this.serviceRegistry.getService("orion.core.file.client");
+			var promises = [];
+			if(fileClient) {
+				files2export.forEach(function(file) {
+					var promise;
+					if(file.name || file.location) {
+						var readLocation = file.location ? file.location : memoryFileSysConst.MEMORY_FILE_PROJECT_PATTERN + file.name;
+						promise = fileClient.read(readLocation);
+					} else {
+						promise = new Deferred().resolve("");
+					}
+					promises.push(promise);			
+				});
+			}
+			return Deferred.all(promises);
 		}
 	});
+	
 	return CodeEdit;
 });
 define('orion/codeEdit', ['embeddedEditor/builder/embeddedEditor'], function(p) { return p; });

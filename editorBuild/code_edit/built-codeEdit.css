@@ -154,13 +154,16 @@
 .textviewTooltip .hoverTooltipTitle {
 	font-weight: normal;
 }
+.textviewTooltip .quickFixList { 
+	margin-top: 5px;
+}
 .textviewTooltip .commandButton { 
 	border: 1px solid #325C80;
 	background-color: inherit;
 	color: white;
 }
 .textviewTooltip .commandButton:not(.dropdownTrigger){ 
-  text-transform: initial; 
+	text-transform: initial; 
 }
 .textviewTooltip .commandList > li {
 	margin: 0;
@@ -2344,6 +2347,7 @@ a.breadcrumb.currentLocation {
 	visibility: hidden;
 	z-index: 175;  
 	position: absolute;
+	color: #222;
 	background-color: #fbfbfb;
 	border-radius: 2px;
 	border: 1px solid #BBB;
