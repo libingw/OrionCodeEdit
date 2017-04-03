@@ -256,6 +256,10 @@
 .contentassist .proposal-emphasis {
 	font-weight: normal;
 }
+.contentassist .proposal-strikethrough {
+	font-weight: normal;
+	text-decoration: line-through;
+}
 .contentassist hr{
 	border: 0;
 	height: 0;
@@ -304,6 +308,14 @@
 	margin-right: 3px;
 	text-align: center;
   	color: white;
+}
+.contentassist .colorTag {
+	width: 16px;
+	height: 10px;
+	border-radius: 2px;
+	vertical-align: middle;
+	margin-right: 5px;
+	display: inline-block;
 }
 .contentassist .iconTemplate {
 	width: 16px;
@@ -1083,20 +1095,69 @@
 	width: 100%;
 	height: 100%;
 }
-.editorViewerHeader {
-	display:flex;
-	background: #3B4B54;
+ .editorViewerHeader {
+	align-items: center;
+ 	background: #3B4B54;
 	color: white;
-	flex-direction:row;
-	align-items:center;
-	line-height:26px;
-	border-bottom: 1px solid #263238;
+	display: flex;
+	flex-direction: row;
+	height: 26px;
+}
+.editorTabContainerOuter {
+	height: 100%;
+	line-height: 26px;
+	width: 100%;
+	overflow: hidden;
+}
+.editorTabContainer {
+	align-items: flex-start;
+	display: flex;
+	flex: 1;
+	flex-direction: row;
+	list-style: none;
+	margin: 0;
+	outline: none;
+	overflow-x: hidden;
+	padding: 0;
+	position: relative;
+	white-space: nowrap;
+	z-index: 3;
+}
+.editorTab {
+	border-top: 1px solid black;
+	border-right: 1px solid black;
+	display: flex;
+	flex: 0 0 auto;
+}
+.editorTabsDisabled {
+	border: none !important;
+	background: inherit !important;
+}
+.editorTabCloseButton {
+	border-radius: 50%;
+	margin: auto 5px auto 5px;
+	font-size: 12px;
+	height: 10px;
+	line-height: 10px;
+	padding: 1px;
+	text-align: center;
+	width: 10px;
+}
+.editorTabCloseButton:hover {
+	background-color: rgb(61, 114, 179);
+	color: #FFFFFF;
 }
 .editorViewerHeaderDirtyIndicator {
 	padding-left: 5px;
 }
 .editorViewerHeaderTitle {
 	padding-left: 5px;
+	margin-left: 5px;
+	margin-right: 5px;
+}
+.editorViewerTabDropdown {
+	justify-content: flex-end;
+	margin-right: 12px;
 }
 .editorViewerContent {
 	position: absolute;
@@ -1114,6 +1175,13 @@
 	right: 35px;
 	width: 40%;
 	height: 40%;
+}
+.focusedEditorTab {
+	background: white;
+	color: black;
+}
+.hideOnDrag {
+  transform: translateX(-9999px);
 }
 .splitLayout {
 	position: absolute;
@@ -1484,7 +1552,7 @@ button.menuScrollButton.menuBottomScrollButton.core-sprite-openarrow::before {
 	left: 0;
 	right: 0;
 	background-color: rgb(57,75,84);
-	z-index: 149;
+	z-index: 1000;
 	display: block;
 	box-shadow: 0 3px 7pt 0 rgba(0,0,0,0.3) inset;
 }
@@ -2862,6 +2930,14 @@ textarea.parameterInput {
 	vertical-align: top;
 	width: 50em;
 }
+div.parameterInput[contenteditable="true"] {
+	width: 30em;
+	display: inline-block;
+	background-color: white;	
+}
+div.parameterInput[contenteditable="true"]:before {
+    content: "\feff ";
+}
 .parameterPopup {
 	min-width: 15em;
 	max-width: 100em;
@@ -3615,7 +3691,6 @@ html[dir="rtl"] .groupedContentDivider{
 	margin-right:auto;
 }
 .modifiedFileMarker{
-	color:#333;
 	padding-left:5px;
 }
 html[dir="rtl"] .modifiedFileMarker{ 
