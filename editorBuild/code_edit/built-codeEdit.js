@@ -412,7 +412,7 @@ var requirejs, require, define;
 define("almond", function(){});
 
 /**
- * @license RequireJS i18n 2.0.6 Copyright (c) 2010-2012, The Dojo Foundation All Rights Reserved.
+ * @license RequireJS i18n 2.0.4 Copyright (c) 2010-2012, The Dojo Foundation All Rights Reserved.
  * Available via the MIT or new BSD license.
  * see: http://github.com/requirejs/i18n for details
  */
@@ -424,13 +424,13 @@ define("almond", function(){});
  *
  * 1) A regular module can have a dependency on an i18n bundle, but the regular
  * module does not want to specify what locale to load. So it just specifies
- * the top-level bundle, like 'i18n!nls/colors'.
+ * the top-level bundle, like "i18n!nls/colors".
  *
  * This plugin will load the i18n bundle at nls/colors, see that it is a root/master
  * bundle since it does not have a locale in its name. It will then try to find
  * the best match locale available in that master bundle, then request all the
- * locale pieces for that best match locale. For instance, if the locale is 'en-us',
- * then the plugin will ask for the 'en-us', 'en' and 'root' bundles to be loaded
+ * locale pieces for that best match locale. For instance, if the locale is "en-us",
+ * then the plugin will ask for the "en-us", "en" and "root" bundles to be loaded
  * (but only if they are specified on the master bundle).
  *
  * Once all the bundles for the locale pieces load, then it mixes in all those
@@ -451,10 +451,10 @@ define("almond", function(){});
     'use strict';
 
     //regexp for reconstructing the master bundle name from parts of the regexp match
-    //nlsRegExp.exec('foo/bar/baz/nls/en-ca/foo') gives:
-    //['foo/bar/baz/nls/en-ca/foo', 'foo/bar/baz/nls/', '/', '/', 'en-ca', 'foo']
-    //nlsRegExp.exec('foo/bar/baz/nls/foo') gives:
-    //['foo/bar/baz/nls/foo', 'foo/bar/baz/nls/', '/', '/', 'foo', '']
+    //nlsRegExp.exec("foo/bar/baz/nls/en-ca/foo") gives:
+    //["foo/bar/baz/nls/en-ca/foo", "foo/bar/baz/nls/", "/", "/", "en-ca", "foo"]
+    //nlsRegExp.exec("foo/bar/baz/nls/foo") gives:
+    //["foo/bar/baz/nls/foo", "foo/bar/baz/nls/", "/", "/", "foo", ""]
     //so, if match[5] is blank, it means this is the top bundle definition.
     var nlsRegExp = /(^.*(^|\/)nls(\/|$))([^\/]*)\/?([^\/]*)/;
 
@@ -503,7 +503,7 @@ define("almond", function(){});
         masterConfig = masterConfig || {};
 
         return {
-            version: '2.0.6',
+            version: '2.0.4',
             /**
              * Called when a dependency needs to be loaded.
              */
@@ -519,10 +519,10 @@ define("almond", function(){});
                     prefix = match[1],
                     locale = match[4],
                     suffix = match[5],
-                    parts = locale.split('-'),
+                    parts = locale.split("-"),
                     toLoad = [],
                     value = {},
-                    i, part, current = '';
+                    i, part, current = "";
 
                 //If match[5] is blank, it means this is the top bundle definition,
                 //so it does not have to be handled. Locale-specific requests
@@ -538,25 +538,24 @@ define("almond", function(){});
                     locale = masterConfig.locale;
                     if (!locale) {
                         locale = masterConfig.locale =
-                            typeof navigator === 'undefined' ? 'root' :
-                            ((navigator.languages && navigator.languages[0]) ||
-                             navigator.language ||
-                             navigator.userLanguage || 'root').toLowerCase();
+                            typeof navigator === "undefined" ? "root" :
+                            (navigator.language ||
+                             navigator.userLanguage || "root").toLowerCase();
                     }
-                    parts = locale.split('-');
+                    parts = locale.split("-");
                 }
 
                 if (config.isBuild) {
                     //Check for existence of all locale possible files and
                     //require them if exist.
                     toLoad.push(masterName);
-                    addIfExists(req, 'root', toLoad, prefix, suffix);
+                    addIfExists(req, "root", toLoad, prefix, suffix);
                     for (i = 0; i < parts.length; i++) {
                         part = parts[i];
-                        current += (current ? '-' : '') + part;
+                        current += (current ? "-" : "") + part;
                         addIfExists(req, current, toLoad, prefix, suffix);
                     }
-
+                                        
                     if(config.locales) {
                     	var j, k; 
                     	for (j = 0; j < config.locales.length; j++) {
@@ -582,10 +581,10 @@ define("almond", function(){});
                             part;
 
                         //Always allow for root, then do the rest of the locale parts.
-                        addPart('root', master, needed, toLoad, prefix, suffix);
+                        addPart("root", master, needed, toLoad, prefix, suffix);
                         for (i = 0; i < parts.length; i++) {
                             part = parts[i];
-                            current += (current ? '-' : '') + part;
+                            current += (current ? "-" : "") + part;
                             addPart(current, master, needed, toLoad, prefix, suffix);
                         }
 
@@ -2283,8 +2282,9 @@ define('orion/webui/dropdown',['orion/webui/littlelib', 'orion/EventTarget'], fu
 });
 
 /**
- * @license text 2.0.15 Copyright jQuery Foundation and other contributors.
- * Released under MIT license, http://github.com/requirejs/text/LICENSE
+ * @license RequireJS text 2.0.12 Copyright (c) 2010-2014, The Dojo Foundation All Rights Reserved.
+ * Available via the MIT or new BSD license.
+ * see: http://github.com/requirejs/text for details
  */
 /*jslint regexp: true */
 /*global require, XMLHttpRequest, ActiveXObject,
@@ -2305,26 +2305,8 @@ define('text',['module'], function (module) {
         buildMap = {},
         masterConfig = (module.config && module.config()) || {};
 
-    function useDefault(value, defaultValue) {
-        return value === undefined || value === '' ? defaultValue : value;
-    }
-
-    //Allow for default ports for http and https.
-    function isSamePort(protocol1, port1, protocol2, port2) {
-        if (port1 === port2) {
-            return true;
-        } else if (protocol1 === protocol2) {
-            if (protocol1 === 'http') {
-                return useDefault(port1, '80') === useDefault(port2, '80');
-            } else if (protocol1 === 'https') {
-                return useDefault(port1, '443') === useDefault(port2, '443');
-            }
-        }
-        return false;
-    }
-
     text = {
-        version: '2.0.15',
+        version: '2.0.12',
 
         strip: function (content) {
             //Strips <?xml ...?> declarations so that external SVG and XML
@@ -2386,13 +2368,13 @@ define('text',['module'], function (module) {
         parseName: function (name) {
             var modName, ext, temp,
                 strip = false,
-                index = name.lastIndexOf("."),
+                index = name.indexOf("."),
                 isRelative = name.indexOf('./') === 0 ||
                              name.indexOf('../') === 0;
 
             if (index !== -1 && (!isRelative || index > 1)) {
                 modName = name.substring(0, index);
-                ext = name.substring(index + 1);
+                ext = name.substring(index + 1, name.length);
             } else {
                 modName = name;
             }
@@ -2442,7 +2424,7 @@ define('text',['module'], function (module) {
 
             return (!uProtocol || uProtocol === protocol) &&
                    (!uHostName || uHostName.toLowerCase() === hostname.toLowerCase()) &&
-                   ((!uPort && !uHostName) || isSamePort(uProtocol, uPort, protocol, port));
+                   ((!uPort && !uHostName) || uPort === port);
         },
 
         finishLoad: function (name, strip, content, onLoad) {
@@ -2545,8 +2527,7 @@ define('text',['module'], function (module) {
             typeof process !== "undefined" &&
             process.versions &&
             !!process.versions.node &&
-            !process.versions['node-webkit'] &&
-            !process.versions['atom-shell'])) {
+            !process.versions['node-webkit'])) {
         //Using special require.nodeRequire, something added by r.js.
         fs = require.nodeRequire('fs');
 
@@ -2554,7 +2535,7 @@ define('text',['module'], function (module) {
             try {
                 var file = fs.readFileSync(url, 'utf8');
                 //Remove BOM (Byte Mark Order) from utf8 files if it is there.
-                if (file[0] === '\uFEFF') {
+                if (file.indexOf('\uFEFF') === 0) {
                     file = file.substring(1);
                 }
                 callback(file);
@@ -6681,7 +6662,7 @@ define('orion/commandRegistry',[
 								parent.classList.add('quickFixList'); //$NON-NLS-1$
 								var QUICKFIX_ID = 'quickfixDetails'; //$NON-NLS-1$
 								var quickfixDetails = parent.childNodes.item(QUICKFIX_ID);
-								if (command.id === 'ignore.in.file.fix' || command.id === 'css.ignore.on-line.fix'){
+								if (command.id === 'ignore.in.file.fix'){
 									if (!quickfixDetails){
 										quickfixDetails = document.createElement("div");
 										quickfixDetails.id = QUICKFIX_ID;
@@ -8901,15 +8882,12 @@ define('orion/edit/nls/messages',["module"],function(module){
 
 /*******************************************************************************
  * @license
- * Copyright (c) 2012, 2017 IBM Corporation and others.
+ * Copyright (c) 2012, 2016 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials are made 
  * available under the terms of the Eclipse Public License v1.0 
  * (http://www.eclipse.org/legal/epl-v10.html), and the Eclipse Distribution 
  * License v1.0 (http://www.eclipse.org/org/documents/edl-v10.html). 
  * 
- * Contributors:
- *     IBM Corporation - initial API and implementation
- *     Casey Flynn - Google Inc.
  ******************************************************************************/
 /*eslint-env browser, amd*/
 define('orion/edit/nls/root/messages',{
@@ -8961,7 +8939,6 @@ define('orion/edit/nls/root/messages',{
 	"SplitHorizontal": "Split Horizontal",
 	"SplitPipInPip": "Picture in Picture",
 	"SplitModeTooltip": "Change split editor mode",
-	"AllTabsDropDown": "Open Tabs",
 	"SidePanel": "Side Panel",
 	"SidePanelTooltip": "Choose what to show in the side panel.",
 	"Slideout": "Slideout",
@@ -8995,7 +8972,8 @@ define('orion/edit/nls/root/messages',{
 	"OpenFolderTip": "Change the root folder",
 	"Dependency": "Dependency",
 	"UnnamedCommand": "Unnamed",
-	"Search": "Search...",
+	"searchInFolder": "Folder Search...",
+	"Global Search": "Search...",
 	"ClickEditLabel": "Click to edit",
 	"ProjectInfo": "Project Information",
 	"Name": "Name",
@@ -9014,12 +8992,8 @@ define('orion/edit/nls/root/messages',{
 	"FormatTooltip":"Format editor contents",
 	"Cancel":"Cancel",
 	"Yes":"Yes",
-	"No":"No",
-	"selectNextTab": "Select Next Editor Tab",
-	"selectPreviousTab": "Select Previous Editor Tab",
-	"showTabDropdown": "Display Open Editor Tabs"	
+	"No":"No"
 });
-
 
 /*******************************************************************************
  * @license
@@ -11995,7 +11969,7 @@ function _generateSearchHelperRegEx(inFileQuery, searchParams, fromStart){
 	}
 }
 
-searchUtils.getSearchParams = function(searcher, searchStr, advOptions, searchScopeOption){
+searchUtils.getSearchParams = function(searcher, searchStr, advOptions){
 	if (searcher) {
 		var newSearchStr = searchStr, commitSearch = true;
 		if(newSearchStr === "*"){ //$NON-NLS-0$
@@ -12005,7 +11979,7 @@ searchUtils.getSearchParams = function(searcher, searchStr, advOptions, searchSc
 			commitSearch = advOptions && advOptions.type !== searchUtils.ALL_FILE_TYPE;
 		}
 		if (commitSearch) {
-			var searchParams = searcher.createSearchParams(newSearchStr, false, false, advOptions, searchScopeOption);
+			var searchParams = searcher.createSearchParams(newSearchStr, false, false, advOptions);
 			return searchParams;
 		}
 	} else {
@@ -13893,6 +13867,25 @@ define('orion/editorCommands',[
 			this._createOpenFolderCommand();
 			this._createOpenRecentCommand();
 			return this._createEditCommands();
+		},
+		updateWorkspacePrefs:function(workspaceAddress){
+			var that = this;
+			return this.preferences.get("/workspace").then(function(prefs) {
+				return prefs.recentWorkspaces ? prefs.recentWorkspaces : [];
+			}).then(function(recentworkspaces){
+				var RECENT_ARRAY_LENGTH = 10;
+				var oldIndex = recentworkspaces.indexOf(workspaceAddress);
+				if(oldIndex !== -1){
+					recentworkspaces.splice(oldIndex,1);
+				}
+				if(recentworkspaces.length < RECENT_ARRAY_LENGTH){
+					recentworkspaces.unshift(workspaceAddress);
+				}else if(recentworkspaces.length === RECENT_ARRAY_LENGTH){
+					recentworkspaces.pop();
+					recentworkspaces.unshift(workspaceAddress);
+				}
+				return that.preferences.put("/workspace",{recentWorkspaces: recentworkspaces, currentWorkspace: workspaceAddress});
+			})
 		},
 		//TODO: We need a better way invoke side bar action 
 		setSideBar: function(sideBar) {
@@ -18316,9 +18309,6 @@ define('orion/inputManager',[
 		this.reveal = options.reveal;
 		this.isUnsavedWarningNeeed = options.isUnsavedWarningNeeed;
 		this.confirm = options.confirm;
-		this.generalPreferences = options.generalPreferences || {};
-		var generalPrefs = this.generalPreferences || {};
-		this.isEditorTabsEnabled = generalPrefs.hasOwnProperty("enableEditorTabs") ? generalPrefs.enableEditorTabs : true;
 		this._input = this._title = "";
 		if (this.fileClient) {
 			this.fileClient.addEventListener("Changed", function(evt) { //$NON-NLS-0$
@@ -18767,7 +18757,7 @@ define('orion/inputManager',[
 					this.reportStatus("");
 					this._input = fileURI;
 					var metadata = evt.metadata;
-					this._setInputContents(input, fileURI, null, metadata, false, true);
+					this._setInputContents(input, fileURI, null, metadata);
 					return;
 				}
 				if (fileURI) {
@@ -18795,7 +18785,7 @@ define('orion/inputManager',[
 					this._setNoInput(true);
 				}
 			}.bind(this);
-			if (editor && editor.isDirty() && !this.isEditorTabsEnabled) {
+			if (editor && editor.isDirty()) {
 				var oldLocation = this._location;
 				var oldResource = oldInput.resource;
 				var newResource = input.resource;
@@ -18803,13 +18793,30 @@ define('orion/inputManager',[
 					if (this._autoSaveEnabled) {
 						this.save();
 						afterConfirm();
-					} else if(this.isUnsavedWarningNeeed()) {
-						var cancelCallback = function() {
-							window.location.hash = oldLocation;
-							this.reveal(this.getFileMetadata());
-							return;
-						}.bind(this);
-						this.confirmUnsavedChanges(afterConfirm, cancelCallback);
+					}else if(this.isUnsavedWarningNeeed()) {
+						this.confirm(messages.confirmUnsavedChanges,
+							[{
+								label:messages["Yes"],
+								callback:function(){
+									this.save();
+									afterConfirm();
+								}.bind(this),
+								type:"ok"
+							},{
+								label:messages["No"],
+								callback:function(){
+									afterConfirm();
+								},
+								type:"ok"
+							},{
+								label:messages["Cancel"],
+								callback:function(){
+									window.location.hash = oldLocation;
+									this.reveal(this.getFileMetadata());
+									return;
+								}.bind(this),
+								type:"cancel"
+							}]);
 					}else{
 						afterConfirm();
 					}
@@ -18817,28 +18824,6 @@ define('orion/inputManager',[
 			}else{
 				afterConfirm();
 			}
-		},
-		confirmUnsavedChanges: function(afterConfirm, cancelCallback, targetNode) {
-			this.confirm(messages.confirmUnsavedChanges,
-				[{
-					label:messages["Yes"],
-					callback:function(){
-						this.save();
-						afterConfirm();
-					}.bind(this),
-					type:"ok"
-				},{
-					label:messages["No"],
-					callback:function(){
-						afterConfirm();
-					},
-					type:"ok"
-				},{
-					label:messages["Cancel"],
-					callback: cancelCallback,
-					type:"cancel"
-				}],
-				targetNode);
 		},
 		setTitle: function(title) {
 			var indexOfSlash = title.lastIndexOf("/"); //$NON-NLS-0$
@@ -18907,7 +18892,7 @@ define('orion/inputManager',[
 			this.setContentType(null);
 			this.dispatchEvent({ type: "InputChanged", input: null }); //$NON-NLS-0$
 		},
-		_setInputContents: function(input, title, contents, metadata, noSetInput, isCachedContent) {
+		_setInputContents: function(input, title, contents, metadata, noSetInput) {
 			var _name, isDir = false;
 			if (metadata) {
 				this._fileMetadata = metadata;
@@ -18945,11 +18930,6 @@ define('orion/inputManager',[
 			if (!isDir) {
 				if (!noSetInput) {
 					editor.setInput(title, null, contents);
-					if (isCachedContent) {
-						// Check server for updated content.
-						this.load();
-					}
-
 				}
 				if (editor && editor.getTextView && editor.getTextView()) {
 					var textView = editor.getTextView();
@@ -18958,9 +18938,7 @@ define('orion/inputManager',[
 						editor.getModel().setModelData({	 metadata: metadata});
 					}
 				}
-				if (!this.isEditorTabsEnabled) {
-					this._clearUnsavedChanges();
-				}
+				this._clearUnsavedChanges();
 				if (!this.processParameters(input)) {
 					if (evt.session) {
 						evt.session.apply();
@@ -26221,7 +26199,7 @@ define("orion/editor/textView", [  //$NON-NLS-1$
 			}	
 		},
 		_isOverOverlayScroll: function() {
-			var scrollShowing = Date.now() - this._lastScrollTime < 1000;
+			var scrollShowing = Date.now() - this._lastScrollTime < 200;
 			if (!scrollShowing) {
 				return {};
 			}
@@ -34310,7 +34288,7 @@ define("orion/editor/linkedMode", [
 					if (position.escape) { continue; }
 					var type = mAnnotations.AnnotationType.ANNOTATION_LINKED_GROUP;
 					if (position.group === model.selectedGroupIndex) {
-						if (position.index === 0 && position.count > 1) {
+						if (position.index === 0) {
 							type = mAnnotations.AnnotationType.ANNOTATION_SELECTED_LINKED_GROUP;
 						} else {
 							type = mAnnotations.AnnotationType.ANNOTATION_CURRENT_LINKED_GROUP;
@@ -35879,19 +35857,18 @@ define ('orion/hover',[
  *     IBM Corporation - initial API and implementation
  *******************************************************************************/
 /*eslint-env browser, amd*/
-/*eslint-disable no-else-return, no-extra-parens*/
-define("orion/editor/contentAssist", [
-	'i18n!orion/editor/nls/messages',
-	'orion/keyBinding',
-	'orion/editor/keyModes',
-	'orion/editor/eventTarget',
-	'orion/Deferred',
-	'orion/objects',
-	'orion/editor/tooltip',
-	'orion/editor/util',
-	'orion/util',
-	'orion/webui/littlelib',
-	'orion/metrics'
+define("orion/editor/contentAssist", [ //$NON-NLS-0$
+	'i18n!orion/editor/nls/messages', //$NON-NLS-0$
+	'orion/keyBinding', //$NON-NLS-0$
+	'orion/editor/keyModes', //$NON-NLS-0$
+	'orion/editor/eventTarget', //$NON-NLS-0$
+	'orion/Deferred', //$NON-NLS-0$
+	'orion/objects', //$NON-NLS-0$
+	'orion/editor/tooltip', //$NON-NLS-0$
+	'orion/editor/util', //$NON-NLS-0$
+	'orion/util', //$NON-NLS-0$
+	'orion/webui/littlelib', //$NON-NLS-0$
+	'orion/metrics' //$NON-NLS-0$
 ], function(messages, mKeyBinding, mKeyModes, mEventTarget, Deferred, objects, mTooltip, textUtil, util, lib, mMetrics) {
 	/**
 	 * @name orion.editor.ContentAssistProvider
@@ -35965,7 +35942,6 @@ define("orion/editor/contentAssist", [
 		selected : "selected", //$NON-NLS-0$
 		hr : "proposal-hr", //$NON-NLS-0$
 		emphasis : "proposal-emphasis", //$NON-NLS-0$
-		strikethrough: "proposal-strikethrough",
 		noemphasis : "proposal-noemphasis", //$NON-NLS-0$
 		noemphasis_title : "proposal-noemphasis-title", //$NON-NLS-0$
 		noemphasis_title_keywords : "proposal-noemphasis-title-keywords", //$NON-NLS-0$
@@ -36060,7 +36036,7 @@ define("orion/editor/contentAssist", [
 				end: mapEnd
 			};
 			this.setState(State.INACTIVE);
-			var proposalText = typeof proposal === "string" ? proposal : proposal.proposal;
+			var proposalText = typeof proposal === "string" ? proposal : proposal.proposal; //$NON-NLS-0$
 			view.setText(proposalText, start, end);
 			if (proposal.additionalEdits) {
 				var edit;
@@ -36177,7 +36153,7 @@ define("orion/editor/contentAssist", [
 			return index;
 		},
 		handleError: function(error) {
-			if (typeof console !== "undefined") {
+			if (typeof console !== "undefined") { //$NON-NLS-0$
 				console.log("Error retrieving content assist proposals"); //$NON-NLS-0$
 				console.log(error && error.stack);
 			}
@@ -36189,7 +36165,7 @@ define("orion/editor/contentAssist", [
 		initialize: function() {
 			this._providers.forEach(function(info) {
 				var provider = info.provider;
-				if (typeof provider.initialize === "function") {
+				if (typeof provider.initialize === "function") {//$NON-NLS-0$
 					provider.initialize();
 				}
 			});
@@ -36376,7 +36352,7 @@ define("orion/editor/contentAssist", [
 								}
 								
 								return activated;
-							} else if (typeof proposal === "string") {
+							} else if (typeof proposal === "string") { //$NON-NLS-0$
 								pattern = getRegexp("", this._filterText);
 								return pattern.test(proposal);
 							}
@@ -36639,21 +36615,21 @@ define("orion/editor/contentAssist", [
 			if (this._triggerListenerInstalled) {
 				// uninstall the listener if necessary
 				if (!this._autoTriggerEnabled || !this._charTriggersInstalled) {
-					this.textView.removeEventListener("Modify", this._boundTriggerListener);
+					this.textView.removeEventListener("Modify", this._boundTriggerListener); //$NON-NLS-0$
 					this._triggerListenerInstalled = false;
 				}
 			} else if (this._autoTriggerEnabled && this._charTriggersInstalled){
 				// install the listener if necessary
-				this.textView.addEventListener("Modify", this._boundTriggerListener);
+				this.textView.addEventListener("Modify", this._boundTriggerListener); //$NON-NLS-0$
 				this._triggerListenerInstalled = true;
 			}
 		},
 		
 		_addTextViewListeners: function() {
 			if (!this._textViewListenersAdded) {
-				this.textView.addEventListener("ModelChanging", this._textViewListeners.onModelChanging);
-				this.textView.addEventListener("Scroll", this._textViewListeners.onScroll);
-				this.textView.addEventListener("Selection", this._textViewListeners.onSelection);
+				this.textView.addEventListener("ModelChanging", this._textViewListeners.onModelChanging); //$NON-NLS-0$
+				this.textView.addEventListener("Scroll", this._textViewListeners.onScroll); //$NON-NLS-0$
+				this.textView.addEventListener("Selection", this._textViewListeners.onSelection); //$NON-NLS-0$
 				this._textViewListenersAdded = true;
 			}
 		},
@@ -36661,9 +36637,9 @@ define("orion/editor/contentAssist", [
 		_removeTextViewListeners: function() {
 			if (this._textViewListenersAdded) {
 				this._latestModelChangingEvent = null;
-				this.textView.removeEventListener("ModelChanging", this._textViewListeners.onModelChanging);
-				this.textView.removeEventListener("Scroll", this._textViewListeners.onScroll);
-				this.textView.removeEventListener("Selection", this._textViewListeners.onSelection);
+				this.textView.removeEventListener("ModelChanging", this._textViewListeners.onModelChanging); //$NON-NLS-0$
+				this.textView.removeEventListener("Scroll", this._textViewListeners.onScroll); //$NON-NLS-0$
+				this.textView.removeEventListener("Selection", this._textViewListeners.onSelection); //$NON-NLS-0$
 				this._textViewListenersAdded = false;
 			}
 		},
@@ -36701,7 +36677,7 @@ define("orion/editor/contentAssist", [
 		this.widget = ContentAssistWidget;
 		this.proposals = [];
 		var self = this;
-		this.contentAssist.addEventListener("ProposalsComputed", function(event) {
+		this.contentAssist.addEventListener("ProposalsComputed", function(event) { //$NON-NLS-0$
 			self.proposals = event.data.proposals;
 			if (self.proposals.length === 0) {
 				self.selectedIndex = -1;
@@ -36997,7 +36973,7 @@ define("orion/editor/contentAssist", [
 		this.isShowing = false;
 		this._useResizeTimer = false;
 		var document = this.textView.getOptions("parent").ownerDocument; //$NON-NLS-0$
-		this.parentNode = typeof parentNode === "string" ? document.getElementById(parentNode) : parentNode;
+		this.parentNode = typeof parentNode === "string" ? document.getElementById(parentNode) : parentNode; //$NON-NLS-0$
 		if (!this.parentNode) {
 			this.parentNode = util.createElement(document, "div"); //$NON-NLS-0$
 			this.parentNode.className = "contentassist"; //$NON-NLS-0$
@@ -37017,7 +36993,7 @@ define("orion/editor/contentAssist", [
 			this._useResizeTimer = true;
 		}
 		
-		textUtil.addEventListener(this.parentNode, "scroll", this.onScroll.bind(this));
+		textUtil.addEventListener(this.parentNode, "scroll", this.onScroll.bind(this)); //$NON-NLS-0$
 		
 		var self = this;
 		this.textViewListener = {
@@ -37030,7 +37006,7 @@ define("orion/editor/contentAssist", [
 				// the click is handled by the onClick() function
 			}
 		};
-		this.contentAssist.addEventListener("Deactivating", function(event) {
+		this.contentAssist.addEventListener("Deactivating", function(event) { //$NON-NLS-0$
 			self.hide();
 		});
 		this.scrollListener = function(e) {
@@ -37040,7 +37016,7 @@ define("orion/editor/contentAssist", [
 			}
 		};
 		//TODO: code edit widget : clean up the code to remove the listener here
-		textUtil.addEventListener(document, "scroll", this.scrollListener);
+		textUtil.addEventListener(document, "scroll", this.scrollListener); //$NON-NLS-0$
 	}
 	ContentAssistWidget.prototype = /** @lends orion.editor.ContentAssistWidget.prototype */ {
 		/** @private */
@@ -37065,7 +37041,7 @@ define("orion/editor/contentAssist", [
 			div.setAttribute("role", "option"); //$NON-NLS-1$ //$NON-NLS-2$
 			div.className = STYLES[proposal.style] ? STYLES[proposal.style] : STYLES.dfault;
 			var node;
-			if (proposal.style === "hr") {
+			if (proposal.style === "hr") { //$NON-NLS-0$
 				node = util.createElement(document, "hr"); //$NON-NLS-0$
 			} else {
 				node = this._createDisplayNode(proposal, itemIndex);
@@ -37078,7 +37054,7 @@ define("orion/editor/contentAssist", [
 		createAccessible: function() {
 			var mode = this._contentAssistMode;
 			var self = this;
-			textUtil.addEventListener(this.parentNode, "keydown", function(evt) {
+			textUtil.addEventListener(this.parentNode, "keydown", function(evt) { //$NON-NLS-0$
 				if (!evt) { evt = window.event; }
 				if (evt.preventDefault) {
 					evt.preventDefault();
@@ -37106,7 +37082,7 @@ define("orion/editor/contentAssist", [
 		},
 		/** @private */
 		_createDisplayNode: function(proposal, index) {
-			var node = document.createElement("span");
+			var node = document.createElement("span"); //$NON-NLS-0$
 			
 			if (!proposal){
 				return node;
@@ -37174,7 +37150,7 @@ define("orion/editor/contentAssist", [
 		},
 		/** @private */
 		_createNameNode: function(name) {
-			var node = document.createElement("span");
+			var node = document.createElement("span"); //$NON-NLS-0$
 			node.classList.add("proposal-name"); //$NON-NLS-0$
 			node.appendChild(document.createTextNode(name));
 			return node;
@@ -37187,16 +37163,13 @@ define("orion/editor/contentAssist", [
 		_createTagsNode: function(tags) {
 			var tagsNode = null;
 			if (tags && tags.constructor === Array && tags.length > 0){
-				tagsNode = document.createElement("span");
+				tagsNode = document.createElement("span");	 //$NON-NLS-1$
 				for (var i=0; i<tags.length; i++) {
 					var tag = tags[i];
-					if (tag.content || tag.cssClass || tag.color){
-						var tagNode = document.createElement("span");
+					if (tag.content || tag.cssClass){
+						var tagNode = document.createElement("span"); //$NON-NLS-1$
 						if (tag.cssClass){
 							tagNode.classList.add(tag.cssClass);
-						} else if (typeof tag.color === 'string' && tag.color.match(/^[\w-]*$/)){
-							tagNode.classList.add('colorTag'); //$NON-NLS-1$
-							tagNode.style.backgroundColor = tag.color;
 						} else {
 							tagNode.classList.add('proposalTag'); //$NON-NLS-1$
 						}
@@ -37391,7 +37364,7 @@ define("orion/editor/contentAssist", [
 					this._mutationObserver.observe(this.parentNode, {attributes: true});
 				}
 				if (!this.textViewListenerAdded) {
-					this.textView.addEventListener("MouseDown", this.textViewListener.onMouseDown);
+					this.textView.addEventListener("MouseDown", this.textViewListener.onMouseDown); //$NON-NLS-0$
 					this.textViewListenerAdded = true;
 				}
 			}
@@ -37413,7 +37386,7 @@ define("orion/editor/contentAssist", [
 			this._contentAssistMode._hideTooltip();
 			
 			if (this.textViewListenerAdded) {
-				this.textView.removeEventListener("MouseDown", this.textViewListener.onMouseDown);
+				this.textView.removeEventListener("MouseDown", this.textViewListener.onMouseDown); //$NON-NLS-0$
 				this.textViewListenerAdded = false;
 			}
 			
@@ -40064,27 +40037,25 @@ define("orion/editor/textStyler", ['orion/editor/annotations', 'orion/editor/eve
 		},
 		getStyles: function(offset) {
 			var result = [];
-			if (this._view) {
-				var model = this._view.getModel();
-				if (model.getBaseModel) {
-					model = model.getBaseModel();
+			var model = this._view.getModel();
+			if (model.getBaseModel) {
+				model = model.getBaseModel();
+			}
+			var block = this._findBlock(this._rootBlock, offset);
+			var lineIndex = model.getLineAtOffset(offset);
+			var lineText = model.getLine(lineIndex);
+			var styles = [];
+			this._stylerAdapter.parse(lineText, model.getLineStart(lineIndex), 0, block, styles);
+			var style = styles[binarySearch(styles, offset, true)];
+			if (style && style.start <= offset && offset < style.end) {
+				result.push(style);
+			}
+			while (block) {
+				style = this._stylerAdapter.computeStyle(block, model, offset);
+				if (style) {
+					result.splice(0, 0, style);
 				}
-				var block = this._findBlock(this._rootBlock, offset);
-				var lineIndex = model.getLineAtOffset(offset);
-				var lineText = model.getLine(lineIndex);
-				var styles = [];
-				this._stylerAdapter.parse(lineText, model.getLineStart(lineIndex), 0, block, styles);
-				var style = styles[binarySearch(styles, offset, true)];
-				if (style && style.start <= offset && offset < style.end) {
-					result.push(style);
-				}
-				while (block) {
-					style = this._stylerAdapter.computeStyle(block, model, offset);
-					if (style) {
-						result.splice(0, 0, style);
-					}
-					block = block.parent;
-				}
+				block = block.parent;
 			}
 			return result;
 		},
@@ -44489,11 +44460,10 @@ define('orion/editorView',[
 			var inputManager = this.inputManager;
 			if (textView && inputManager) {
 				var metadata = inputManager.getFileMetadata();
-				var storage = util.isElectron ? localStorage : sessionStorage;
 				if (metadata) {
 					evt.session = {
 						get: function() {
-							return storage.editorViewSection ? JSON.parse(storage.editorViewSection) : {}; 
+							return sessionStorage.editorViewSection ? JSON.parse(sessionStorage.editorViewSection) : {}; 
 						},
 						apply: function(animate) {
 							if (!metadata.Location) return;
@@ -44502,9 +44472,6 @@ define('orion/editorView',[
 							if (locationSession && locationSession.ETag === metadata.ETag) {
 								editor.setSelections(locationSession.selections);
 								textView.setTopIndex(locationSession.topIndex, animate ? function() {} : undefined);
-							}else if(util.isElectron){
-								delete session[metadata.Location];
-								storage.editorViewSection = JSON.stringify(session);
 							}
 						},
 						save: function() {
@@ -44515,7 +44482,7 @@ define('orion/editorView',[
 								topIndex: textView.getTopIndex(),
 								selections: editor.getSelections().map(function(s) { return s.getOrientedSelection(); })
 							};
-							storage.editorViewSection = JSON.stringify(session);
+							sessionStorage.editorViewSection = JSON.stringify(session);
 						}
 					};
 				}
